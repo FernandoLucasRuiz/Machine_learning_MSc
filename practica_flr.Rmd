@@ -1,0 +1,1483 @@
+---
+title: "Práctica 1 Machine Learning 2023/2024"
+subtitle: "Master en Bioinformática, Universidad de Murcia"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: no
+    theme: spacelab
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(doParallel)
+num_cores <- detectCores()
+registerDoParallel(cores=num_cores)
+
+```
+
+# Tarea a realizar
+
+En esta práctica se pretenda analizar 3 datasets (BostonHousingData, LetterRecognition, Diabetes en el BRFSS). En cada uno de ellos vamos a responder una serie de preguntas. Se pone en práctica desde la asociación de variables pasando por PCA, el uso de algoritmos básicos como regresión lineal, logística, knn y naive bayes, y preproceso en tres datasets diferentes.
+
+En primer lugar vamos a responder las preguntas del primer dataset BostonHousingData.
+
+## Librerias
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(gridExtra)
+library(viridis)  # Para la paleta de colores viridis
+library(caret)
+library(kknn)
+library(pheatmap) # heatmap 
+library(REdaS) # Para test esfericidad de Bartlett
+library(factoextra) #Gráficas PCA
+library(REdaS)
+```
+
+
+# BostonHousingData
+
+Los datos de este dataset se localizan en el paquete R mlbench.
+
+```{r}
+library(mlbench)
+data(BostonHousing)
+```
+
+
+## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
+
+```{r}
+str(BostonHousing)
+```
+El dataset contiene 506 filas y 14 variables.
+
+Todas las variables son de tipo numérico excepto la variable chas o Charles River dummy variable.
+
+
+## Pregunta 2. Explica qué representan los ejemplos
+
+Este dataset incluye información sobre diferentes zonas de Boston, detalladas a través de varios parámetros. Cada registro en este dataset representa una zona de Boston, con características que influyen en la estimación del valor medio de las viviendas en esa zona. La variable dependiente es medv, que se refiere al valor medio de las casas habitadas por sus propietarios en miles de dólares.
+
+Las variables del dataset son:
+
+1. crim: Tasa de criminalidad per cápita por ciudad.
+2. zn: Proporción de terreno residencial zonificado para lotes de más de 25,000 pies cuadrados.
+3. indus: Proporción de acres de negocio no minorista por ciudad.
+4. chas: Variable ficticia Charles River (= 1 si el tramo limita con el río; 0 de lo contrario).
+5. nox: Concentración de óxidos nítricos (partes por 10 millones).
+6. rm: Número promedio de habitaciones por vivienda.
+7. age: Proporción de unidades ocupadas por sus propietarios construidas antes de 1940.
+8. dis: Distancias ponderadas a cinco centros de empleo de Boston.
+9. rad: Índice de accesibilidad a autopistas radiales.
+10. tax: Tasa de impuesto a la propiedad de valor total por $10,000.
+11. ptratio: Ratio alumno-profesor por ciudad.
+12. black: 1000(Bk - 0.63)^2 donde Bk es la proporción de personas negras por ciudad.
+13. lstat: Porcentaje de población de estatus bajo.
+14. medv: Valor mediano de las casas ocupadas por sus propietarios en miles de dólares.
+
+Para ver un poco más en detalle los datos vamos a representarlos en gráficas para ver cómo son sus distribuciones o si podemos sacar alguna conclusión previa.
+
+```{r}
+ggplot(BostonHousing, aes(x= medv)) +
+  geom_histogram(fill ="#f1e6b2", color = "black")+
+  theme_minimal() 
+```
+
+```{r}
+for (i in 1:14) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i])) +
+    geom_density(adjust=1.5, alpha=.7, fill="#f1e6b2") +
+    theme_minimal() +
+    labs(title = names(BostonHousing)[i],
+         x = names(pca)[i]) 
+
+  plots[[colnames(pca)[i]]] <- p
+}
+
+plots$chas <- ggplot(BostonHousing, aes(x=chas)) +
+  geom_bar(alpha=.7, fill="#f1e6b2", color = "black")+
+  theme_minimal() +
+  labs(title = "chas",
+       x = "chas")
+
+grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)
+grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
+grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
+plots$chas
+```
+
+1. Crim: Observamos que la tasa de criminalidad es baja aunque existen zonas en los datos que se llega a tasas muy altas de indice de criminalidad de hasta más de 80, que pueden ser los barrios problemáticos de la ciudad de Boston
+
+2. Zn: Esta gráfica nos quiere decir que no hay muchas zonas residenciales, aunque hay dos picos intermedios sobre 23 y 80 que puede ser barrios residenciales.
+
+3. Indus: Hay dos zonas de Boston con negocios de minoristas
+
+4. Nox: La mayoria de zonas de Boston tienen una densidad de 0.4 y 0.6 ppm de oxido nitrico aunque hay otras menos que llegan hasta 0.9 ppm.
+
+5. Rm: El número promedio de habitaciones en Boston son de aproximadamente 6 habitaciones por vivienda.
+
+6. Age: Como vemos, la matoria de casas de Boston están construidas antes 1940. La cola a la izquierda nos puede sugerir que se están construyendo casas nuevas en Boston.
+
+7. Dis : Esta gráfica nos indica que la mayoría de zonas se encuentran cerca de centros de empleo indicando que podría ser el centro de la ciudad, aunque la cola de la derecha nos indica que puede que los barrios residenciales se encuentren a las afueras de la ciudad.
+
+8. Rad: Esta gráfica nos muestra que la mayoría de zonas se encuentran bien comunicadas con autopistas, pero hay una cierta densidad de zonas lejanas a autopistas por lo que podría indicar que son zonas residenciales o marginadas.
+
+9. Tax: Esto nos indica que hay una distribución normal de las tasas excepto unas zonas que pagan más impuestos. Nos sugiere que puede ser una zona residencial de lujo.
+
+10. Ptratio: La mayoría se situa sobre 20 alumnos por profesor. La distribución se ensancha en la cola izquierda porque en colegios privados el ratio suele disminuir.
+
+11. Black: Esta grádica nos puede sugerir que hay pocas zonas en la que la mayoría de personas son de raza caucásica.
+
+12. Lstat: La tasa de personas con estatus bajo ronda el 8% pero la cola de la derecha nos sugiere que hay zonas donde el porcentaje sube por lo que puede ser zonas marginales.
+
+13. Chas: La mayoría de zonas están alejadas del rio Charles
+
+
+
+## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
+
+En regresión, la variable dependiente o variable objetivo es continua, lo que significa que puede tomar cualquier valor dentro de un rango. En el caso de "BostonHousing", la variable medv es un claro ejemplo de una variable continua, ya que el valor de las viviendas puede variar en un amplio espectro, teóricamente sin límites específicos dentro de los rangos observados en los datos.
+
+El objetivo principal de un problema de regresión es predecir valores específicos de la variable dependiente basándose en una o más variables independientes (predictores). En este contexto, estamos interesados en predecir el valor de las viviendas (medv) a partir de otras características del dataset, como la tasa de criminalidad (crim), el número promedio de habitaciones por vivienda (rm), etc.
+
+Los problemas de regresión buscan modelar la relación entre la variable objetivo y las variables predictoras, que puede ser lineal o no lineal. El análisis y modelado de estas relaciones permiten entender cómo las características de las viviendas y sus alrededores afectan su valor de mercado.
+
+Vemos la distribución de los datos medv para tener una imagén inicial de esta variable.
+
+```{r}
+p1 <- ggplot(BostonHousing, aes(x = medv)) +
+    geom_density(adjust=1.5, alpha=.7, fill="#f1e6b2") +
+    theme_minimal() +
+    labs(title = "medv", x ="") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+p2<- ggplot(BostonHousing, aes(x=medv))+
+  geom_boxplot(alpha=.7, fill="#f1e6b2")+
+    theme_minimal() +
+  labs(y ="")
+
+grid.arrange(p1, p2, ncol=1)
+```
+La mayoría de casas valen alrededor de 20.000 a 23.000 dolares. Vemos algunos casos interesantes que podemos tener en cuenta que hay varias casas que no siguen una tendencia normal ya que hay un pico de unas observaciones cuyos valores son de 50.000 dolares. 
+
+Vamos a ver ahora cómo se correlaciona la variable medv con las variables predictoras
+
+```{r}
+plots <- list()
+for (i in 1:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i], y = names(BostonHousing)[14])) +
+  geom_point(color ="#8B1A1A", alpha = 0.7) +
+    labs(title = names(BostonHousing)[i],
+         x = names(BostonHousing)[i], y = names(BostonHousing)[14]) +
+#    scale_color_viridis_c(alpha = 0.7) +
+    xlab(names(BostonHousing)[i]) +
+    theme_minimal() +
+    ylab("medv") +
+    guides(color = FALSE) +
+    theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+  plots[[colnames(BostonHousing)[i]]] <- p
+}
+
+plots$chas <- ggplot(BostonHousing, aes(y = medv, x = chas, fill = chas)) +
+  geom_boxplot() +
+  geom_jitter(color ="#8B1A1A", size = 1, alpha = 0.7) +
+  theme_minimal() +
+  scale_fill_viridis_d() + 
+  theme(legend.position = "none")
+
+grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)
+grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
+grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
+plots$chas
+```
+
+Un resumen de lo visto en los gráficos de puntos:
+
+1. Crim: el precio de los barrios con mayor indice de crimininalidad es menor.
+2. zn: Se aprecia una ligera relación positiva en esta variable
+3. indus: A mayor proporcion de negocios no minorista, el precio de la vivienda cae. 
+4. nox: Se ve una ligera tenendecia a que cuanto mayor es la cantidad de oxido nitrico menor es el precio de las viviendas. Es decir, las zonas más alejadas de la ciudad tendrán un valor mayor en el mercado.
+5. rm: Se ve una clara correlación positiva entre el número de habitaciones y el precio de la vivienda.
+6. age: Se intuye que en los barrios más modernos el precio es ligeramente superior al casco antiguo.
+7. dis: Las zonas más alejadas de la ciudad parece ser que tienen los precios de viviendas más caros
+8. rad: Parece ser que hay barrios con poca accesibilidad a la autopista y son aquellos con un precio más bajo. Hay algunos barrios donde el precio de la vivienda es muy alto y también tiene poca accesibilidad. Puede ser que sean zonas de residencia de lujo.
+9. tax: Se ve una ligera correlacion negativa en esta variable.
+10. ptratio: Las zonas con las viviendas más caras tienen un ratio más bajo de alumno-profesorado.
+11. b: No se una relación clara 
+12. lstat: Esta relación es bastante clara, ya que las personas con estatus bajo viven en zonas con el precio de la vivienda bajo
+13. chas: La descompesación de las clases no nos deja dar una conclusión aunque parece que las zonas cercanas al rio Charles aumentan el precio de la vivienda
+
+```{r}
+correlations <- cor(BostonHousing[,c(-4)])
+
+cor_df <- data.frame(correlations["medv", ])
+
+cor_df$Variable <- rownames(cor_df)
+cor_df <- cor_df %>% filter(Variable != "medv")
+names(cor_df)[1] <- "Correlation"
+cor_df <- cor_df %>% arrange(desc(Correlation))
+
+cor_df$Variable <- factor(cor_df$Variable, levels = cor_df$Variable[order(cor_df$Correlation, decreasing = TRUE)])
+
+ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
+  geom_col() +
+  coord_flip() +
+   labs(title = "Correlations with Medv", x = "", y = "Correlation", fill = "medv") +
+  scale_fill_viridis_c() 
+```
+
+En esta gráfica de correlación vemos que la variable mas correlacionado con la variable medv es aquella variable que mide el numero de personas con estatus bajo (lstat) con una correlación negativa. Luego hay otras como ptratio, indus o tax. La variable con mayor correlación positiva es el número de habitaciones (rm), seguida de la variable con mayor zonas residenciales (zn).
+
+
+## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
+
+Para contrastar si nuestros datos son adecuados para hacer el analisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
+
+En ambos tests rechazamos la hipotesis nula por lo que nuestros datos son adecuados para realizar el PCA Además el test KMO nos da un criterio de 0.86 que es un criterio alto de adecuación para el PCA.
+
+```{r}
+bart_spher(BostonHousing[,c(-4,-14)])
+KMOS(BostonHousing[,c(-4,-14)])
+```
+
+
+Primero vamos a ver si escalamos los datos
+
+```{r}
+datos_long_boston <- pivot_longer(BostonHousing, cols = -chas, names_to = "Variable", values_to = "Valor")
+
+ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
+  geom_boxplot() +
+  geom_jitter(color = "black", size = 0.4, alpha = 0.6) +
+  scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14, hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  
+    axis.text.y = element_text(size = 8),  
+    axis.title = element_text(size = 10),  
+    axis.title.x = element_text(margin = margin(t = 10), size = 14, hjust = 0.5),  
+    axis.title.y = element_text(margin = margin(r = 10), size = 14, hjust = 0.5)  
+  ) +
+  ggtitle("Variables del Boston Housing Dataset (sin CHAS)") +
+  xlab("VARIABLES") +
+  ylab("VALOR")
+```
+
+Vemos que los datos no se distribuyen de la misma manera, por lo que vamos a escalar los datos en el PCA.
+
+
+```{r}
+pca_result <- prcomp(BostonHousing[,c(-4,-14)], scale = TRUE)
+```
+
+```{r}
+var_exp <- pca_result$sdev^2
+prop_var_exp <- var_exp / sum(var_exp)
+cum_var_exp <- cumsum(prop_var_exp)
+
+df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
+df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
+
+# Scree plot con los datos no escalados
+ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_line(aes(group = 1), color = "blue") +
+  geom_point(color = "blue") +
+  theme_minimal() +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot no scaled") +
+  ylim(c(0,1)) +
+  geom_line(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
+  geom_point(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color = "red") +
+  geom_bar(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
+  annotate("text", x = 9, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  geom_text(data = df_cum_var_exp[1:10,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
+```
+
+Con 5 componentes principales se explica el 85% de la varianza por lo que continuaremos con esos datos para ver si hay sesgos en los datos con un heatmap de las correlaciones.
+
+```{r}
+sesgos <- cor(pca_result$x[,1:5], BostonHousing[,c(-4,-14)])
+
+pheatmap(sesgos,
+         clustering_method = "ward.D2",
+         color = colorRampPalette(c("#00AFBB", "white", "#FC4E07"))(255), # Paleta de colores
+         cellwidth = 20,
+         cellheight = 20,
+         breaks = seq(-1, 1, length.out = 256),
+         scale = "none", 
+         annotation_legend = TRUE)
+```
+Vemos claramente que el componente principal 1 genera dos grupos con los predictores. Ahora vamos a ver si la varible dependiente se ve influida por ese sesgo, además de ver la distribución de los variables predictoras entre las dos primeras componentes principales.
+
+
+```{r, warning=FALSE}
+pca <- as.data.frame(pca_result$x[,1:5], stringsAsFactors=F)
+pca <- cbind(BostonHousing, pca)
+
+plots <- list()
+for (i in 1:14) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(pca, aes_string(x = names(pca)[15], y = names(pca)[16], color = names(pca)[i])) +
+    geom_point() +
+    labs(title = names(pca)[i],
+         x = names(pca)[15], y = names(pca)[16], color = names(pca)[i]) +
+    modelr::geom_ref_line(h = 0) +
+    modelr::geom_ref_line(v = 0) +
+    geom_point() +
+    xlab("PC 1 ") +
+    ylab("PC 2")
+
+  plots[[colnames(pca)[i]]] <- p
+}
+
+grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)
+grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
+grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
+plots$medv
+```
+Como observamos en esta última figura, que la distribución de los datos más altos de medv se van hacia la izquierda de la PC1, por lo que podría existir una buena generación de nuestro modelo predictivo.
+
+```{r}
+fviz_pca_var(pca_result, col.var="cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, axes = c(1,2), label = "var"
+             )
+```
+```{r}
+p1 <- fviz_cos2(pca_result, choice = "var", axes = 1, top= 5, barfill = "dodgerblue3") 
+p2 <- fviz_cos2(pca_result, choice = "var", axes = 2, top= 5, barfill = "dodgerblue3") 
+p3 <- fviz_cos2(pca_result, choice = "var", axes = 3, top= 5,barfill = "dodgerblue3") 
+p4 <- fviz_cos2(pca_result, choice = "var", axes = 4, top= 5,barfill = "dodgerblue3")
+
+grid.arrange(p1, p2, p3, p4, ncol=2)
+
+```
+```{r}
+pca_result$rotation[,1:4]
+```
+
+```{r}
+fviz_pca_biplot(pca_result,
+                geom_ind = "point", # para las observaciones
+                geom_var = c("arrow", "text"), # para las variables
+                col.ind = "cos2", # Colorear los puntos por su calidad de representación
+                gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), # Colores para los puntos
+                repel = F # Evitar la superposición de texto
+                )
+```
+Un valor alto de cos2 para una variable en una componente principal indica que la componente explica una gran parte de la varianza de esa variable. En otras palabras, la variable está bien representada en esa dimensión. Esto significa que la dirección y magnitud de la variable tienen una fuerte correlación con la componente principal.
+
+Similarmente, para los individuos, un alto cos2 en una componente principal sugiere que la posición del individuo en el espacio de las componentes principales está fuertemente determinada por esa componente. Esto puede interpretarse como que el individuo tiene características que son bien capturadas o explicadas por esa componente principal.
+
+
+
+
+## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
+
+El problema que hemos identificado es un modelo de regresión. Podriamos utilizar el modelo k vecinos más cercanos para el modelo de regresion.
+
+
+
+## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
+
+```{r}
+plots <- list()
+for (i in 1:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i], y = names(BostonHousing)[14])) +
+  geom_point() +
+  stat_smooth(method = "lm", se = TRUE, col = "blue") +
+    labs(title = names(BostonHousing)[i],
+         x = names(BostonHousing)[i], y = names(BostonHousing)[14]) +
+    geom_point() +
+    xlab(names(BostonHousing)[i]) +
+    ylab("medv")
+
+  plots[[colnames(BostonHousing)[i]]] <- p
+}
+
+grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox,   ncol=2)
+grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
+grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
+```
+
+```{r}
+b2 <- log(BostonHousing[,1])
+b2 <- as.data.frame(cbind(b2, BostonHousing[,14]))
+
+ggplot(b2, aes_string(x = names(b2)[1], y = names(b2)[2])) +
+  geom_point() +
+  stat_smooth(method = "lm", se = TRUE, col = "blue") +
+    labs(title = names(b2)[1],
+         x = names(b2)[1], y = names(b2)[2]) +
+    geom_point() +
+    xlab(names(b2)[1]) +
+    ylab("medv")
+```
+
+
+
+## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+
+```{r}
+set.seed(1234)
+
+boston.TrainIdx.80<- createDataPartition(BostonHousing$medv,
+                                       p=0.8, #Genera un 80% para train, 20% para test
+                                       list = FALSE, #Dame los resultados en una matriz
+                                       times = 1) #Genera solamente una partición 80/20
+
+trainSet.boston <- BostonHousing[boston.TrainIdx.80, ]
+testSet.boston <- BostonHousing[-boston.TrainIdx.80, ]
+```
+
+```{r}
+modelLookup(("kknn"))
+```
+
+https://www.rdocumentation.org/packages/kknn/versions/1.3.1/topics/kknn
+
+```{r}
+set.seed(1234)
+kknnControl.boston <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 3,
+                           seeds = NULL,
+                           returnResamp = "final")
+```
+
+```{r}
+set.seed(1234)
+y = trainSet.boston$medv
+x = trainSet.boston[,-14]
+
+mygrid.boston = expand.grid(kmax = seq(from=5,to=11,2),
+                     distance = seq(1, 3, 1),
+                     kernel = c("rectangular","triangular","optimal" 
+                                 # ,"epanechnikov", "biweight", "triweight" 
+                                 # ,"cos", "inv", "gaussian","rank"
+                                ))
+
+myfit.boston.cv10.rp3 <- train(y=y, x = x, 
+               method = "kknn",
+               metric = "Rsquared",
+               trControl = kknnControl.boston,
+               tuneGrid=mygrid.boston,
+ #              preProcess = c("center", "scale")
+               )
+myfit.boston.cv10.rp3$results
+(myfit.boston.cv10.rp3.best <- subset(myfit.boston.cv10.rp3$results, kmax == myfit.boston.cv10.rp3$bestTune$kmax & distance == myfit.boston.cv10.rp3$bestTune$distance & kernel == myfit.boston.cv10.rp3$bestTune$kernel))
+plot(myfit.boston.cv10.rp3)
+
+```
+
+```{r}
+set.seed(1234)
+y = trainSet.boston$medv
+x = trainSet.boston[,-14]
+
+mygrid.boston = expand.grid(kmax = seq(from=5,to=11,3),
+                     distance = 1,
+                     kernel = c(#"rectangular","triangular", 
+                                "optimal"
+                                ,"epanechnikov", "biweight", "triweight"
+                                 ,"cos", "gaussian","rank"
+                                ))
+
+myfit.boston.cv10.pr3.2 <- train(y=y, x = x, 
+               method = "kknn",
+               metric = "Rsquared",
+               trControl = kknnControl.boston,
+               tuneGrid=mygrid.boston,
+               #preProcess = c("center", "scale")
+               )
+
+myfit.boston.cv10.pr3.2$results
+(myfit.boston.cv10.pr3.2.best <- subset(myfit.boston.cv10.pr3.2$results, kmax == myfit.boston.cv10.pr3.2$bestTune$kmax & distance == myfit.boston.cv10.pr3.2$bestTune$distance & kernel == myfit.boston.cv10.pr3.2$bestTune$kernel))
+plot(myfit.boston.cv10.pr3.2)
+```
+
+```{r}
+ggplot(data = myfit.boston.cv10.pr3.2$resample, aes(x = Rsquared, y =  Resample)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "kknn",
+       x = "Fold number",
+       y = "Rsquared")
+```
+
+
+```{r}
+varImp(myfit.boston.cv10.pr3.2)
+```
+
+
+```{r}
+preds.boston <- predict(myfit.boston.cv10.pr3.2$finalModel, newdata = testSet.boston)
+
+trainSet.boston$trainORtest <- "train"
+testSet.boston$trainORtest <- "test"
+boston_df_plot.boston <- rbind(trainSet.boston, testSet.boston)
+
+prediction_test.boston <- cbind(testSet.boston, preds.boston)
+
+
+ggplot(boston_df_plot.boston, aes(x = age, y = medv)) + 
+  geom_point(aes(color = trainORtest)) + 
+  geom_point(data = prediction_test.boston, aes(x = age, y = preds.boston, color = "Predicciones"), show.legend = TRUE) +
+  scale_color_manual(values = c("train" = "#f1e6b2", "test" = "#b2d8b2", "Predicciones" = "black"),
+                     name = "", labels = c("Predicciones", "Test", "Train")) + 
+  theme_minimal()
+```
+
+```{r, warning=FALSE}
+preds.boston.train <- predict(myfit.boston.cv10.rp3$finalModel, newdata = trainSet.boston)
+
+cat("El error RMSE de los datos de entrenamiento es",sqrt((1/nrow(trainSet.boston)) * sum((trainSet.boston$medv - preds.boston.train)^2)),"\n")
+
+cat("El error RMSE error de los datos de evaluación es", sqrt((1/nrow(testSet.boston)) * sum((testSet.boston$medv - preds.boston)^2)),"\n")
+```
+
+
+
+# LetterRecognition
+
+Los datos de este dataset se localizan en el paquete R mlbench.
+
+```{r}
+library(mlbench)
+data(LetterRecognition)
+```
+
+
+## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
+
+```{r}
+glimpse(LetterRecognition)
+```
+El dataset contiene 20.000 filas y 17 variables.
+
+Todas las variables son de tipo numérico excepto la variable lettr que es la variable dependiente.
+
+
+## Pregunta 2. Explica qué representan los ejemplos
+
+Los datos de LetterRecognition del paquete mlbench en R están diseñados para la tarea de identificar letras del alfabeto inglés en mayúsculas a partir de imágenes en píxeles blanco y negro. Cada imagen de letra se basa en 20 fuentes diferentes, y cada letra de estas fuentes se distorsionó aleatoriamente para producir un conjunto de 20,000 estímulos únicos. Estos estímulos se convirtieron en 16 atributos numéricos primitivos, como momentos estadísticos y recuentos de bordes, que se escalaron para ajustarse a un rango de valores enteros de 0 a 15.
+
+El dataset contiene 20,000 observaciones con 17 variables. La primera variable es categórica y tiene niveles de la A a la Z, representando cada una de las letras del alfabeto. Las 16 variables restantes son numéricas y representan diversas características estadísticas y geométricas de las imágenes de las letras.
+
+
+
+## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
+
+El dataset es un problema de clasificación. Su objetivo es identificar una de las 26 letras mayúsculas del alfabeto inglés a partir de características numéricas extraídas de imágenes de letras. Dado que la variable dependiente (lettr) es categórica con 26 categorías únicas, claramente se trata de un problema de clasificación. Para la distribución de los ejemplos de cada clase, en un conjunto de datos ideal para clasificación, esperarías tener una distribución relativamente equilibrada de ejemplos en cada clase para evitar sesgos en el modelo hacia clases más frecuentes.
+
+
+```{r}
+table(LetterRecognition$lettr)
+```
+
+
+```{r}
+LetterRecognition %>%
+  group_by(lettr) %>%
+  summarize(Frequency = n()) %>%
+  ungroup() %>%
+  ggplot(aes(x = lettr, y = Frequency)) +
+  geom_segment(aes(x = lettr, xend = lettr, y = 0, yend = Frequency)) +
+  geom_point(size = 5, aes(fill = lettr), shape = 21, stroke = 2, alpha = 0.7) +
+  scale_fill_viridis_d() +
+  theme_minimal() +
+  guides(fill = FALSE) 
+```
+
+
+
+## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
+
+
+Para contrastar si nuestros datos son adecuados para hacer el analisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
+
+En ambos tests rechazamos la hipotesis nula por lo que nuestros datos son adecuados para realizar el PCA Además el test KMO nos da un criterio de 0.86 que es un criterio adecuado para el PCA.
+
+```{r}
+bart_spher(LetterRecognition[,-1])
+KMOS(LetterRecognition[,-1])
+```
+
+
+Primero vamos a ver si escalamos los datos
+
+```{r}
+datos_long_letter <- pivot_longer(LetterRecognition, cols = -lettr, names_to = "Variable", values_to = "Valor")
+
+ggplot(datos_long_letter, aes(x = Variable, y = Valor, fill = Variable)) +
+  geom_boxplot() +
+  geom_jitter(aes(color = Variable), size = 0.4, alpha = 0.6) + 
+  scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
+  scale_color_viridis(discrete = TRUE, alpha = 0.6) + 
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14, hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    axis.title = element_text(size = 10),
+    axis.title.x = element_text(margin = margin(t = 10), size = 14, hjust = 0.5),
+    axis.title.y = element_text(margin = margin(r = 10), size = 14, hjust = 0.5)
+  ) +
+  ggtitle("Variables del letter recognition (sin lettr)") +
+  xlab("VARIABLES") +
+  ylab("VALOR")
+```
+
+
+
+```{r}
+pca_result.letter <- prcomp(LetterRecognition[,-1])
+```
+
+```{r}
+var_exp <- pca_result.letter$sdev^2
+prop_var_exp <- var_exp / sum(var_exp)
+cum_var_exp <- cumsum(prop_var_exp)
+
+df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
+df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
+
+# Scree plot con los datos no escalados
+ggplot(df_var_exp[1:15,], aes(x = Comp, y = VarExp)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_line(aes(group = 1), color = "blue") +
+  geom_point(color = "blue") +
+  theme_minimal() +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot no scaled") +
+  ylim(c(0,1)) +
+  geom_line(data = df_cum_var_exp[1:15,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
+  geom_point(data = df_cum_var_exp[1:15,], aes(x = Comp, y = CumVarExp), color = "red") +
+  geom_bar(data = df_cum_var_exp[1:15,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
+  annotate("text", x = 13, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  geom_text(data = df_cum_var_exp[1:15,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
+```
+
+
+
+```{r}
+sesgos.letter <- cor(pca_result.letter$x[,1:7], LetterRecognition[,-1])
+
+pheatmap(sesgos.letter,
+         clustering_method = "ward.D2",
+         color = colorRampPalette(c("#00AFBB", "white", "#FC4E07"))(255), # Paleta de colores
+         cellwidth = 20,
+         cellheight = 20,
+         breaks = seq(-1, 1, length.out = 256),
+         scale = "none", 
+         annotation_legend = TRUE)
+```
+
+
+
+
+
+```{r, warning=FALSE}
+pca.letter <- as.data.frame(pca_result.letter$x[,1:7], stringsAsFactors=F)
+pca.letter <- cbind(LetterRecognition, pca.letter)
+
+plots <- list()
+for (i in 1:14) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(pca.letter, aes_string(x = names(pca.letter)[18], y = names(pca.letter)[19], color = names(pca.letter)[i])) +
+    geom_point() +
+    labs(x = names(pca.letter)[18], y = names(pca.letter)[19], color = names(pca.letter)[i]) +
+    modelr::geom_ref_line(h = 0) +
+    modelr::geom_ref_line(v = 0) +
+    geom_point() +
+    xlab("PC 1 ") +
+    ylab("PC 2")
+
+  plots[[colnames(pca.letter)[i]]] <- p
+}
+
+grid.arrange(plots$x.box , plots$y.box, plots$width, plots$high, ncol=2)
+grid.arrange(plots$x.box , plots$y.box, plots$width, plots$high, ncol=2)
+grid.arrange(plots$onpix, plots$x.bar, plots$y.bar, plots$x2bar, ncol=2)
+grid.arrange(plots$y2bar, plots$xybar, plots$x2ybr, plots$xy2br, ncol = 2)
+plots$x.ege
+plots$lettr
+```
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("M3C")
+
+library(M3C)
+tsne(LetterRecognition[,-1],colvec=c('gold'))
+
+library(Rtsne)
+# Assuming LetterRecognition is your dataset and you're excluding the first column
+data_matrix <- LetterRecognition[,-1]
+data_matrix_unique <- unique(data_matrix)
+tsne_results <- Rtsne(data_matrix, dims = 2, perplexity = 30)
+```
+
+
+
+```{r}
+# Obtener todas las clases únicas de la variable lettr
+unique_letters <- unique(LetterRecognition$lettr)
+
+plots <- list()
+
+for (letter in unique_letters) {
+  pca.letter$highlight <- ifelse(pca.letter$lettr == letter, "Highlighted", "Other")
+  
+  # Asegúrate de que el dataframe pasado a ggplot() es 'pca.letter', no 'LetterRecognition'
+  plots[[letter]] <- ggplot(pca.letter, aes(x = PC1, y = PC2)) +
+    geom_point(aes(color = highlight), alpha = ifelse(pca.letter$highlight == "Highlighted", 1, 0.05)) +
+    scale_color_manual(values = c("Highlighted" = "red", "Other" = "grey")) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    labs(title = letter) +
+    theme_minimal() +
+    guides(color = FALSE, alpha = FALSE)
+}
+
+grid.arrange(plots$A, plots$B,plots$C,plots$D,plots$E,plots$F, plots$G, plots$H, plots$I,plots$J,ncol = 5)
+grid.arrange(plots$K,plots$L, plots$M,plots$N,plots$O,plots$P,plots$Q,plots$R,plots$S,plots$T,ncol = 5)
+grid.arrange( plots$U,plots$V,plots$W,plots$X, plots$Z, ncol = 3)
+
+```
+
+
+
+```{r}
+p12 <- fviz_pca_var(pca_result.letter, col.var="cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, axes = c(1,2), label = "var", title="PC1-2") + theme(legend.position = "none")
+
+p34 <- fviz_pca_var(pca_result.letter, col.var="cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, axes = c(3,4), label = "var", title="PC3-4") + theme(legend.position = "none")
+
+p56 <- fviz_pca_var(pca_result.letter, col.var="cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, axes = c(5,6), label = "var", title="PC5-6")+ theme(legend.position = "none")
+
+
+
+grid.arrange(p12, p34, ncol= 2)
+p56
+
+```
+```{r}
+p1 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 1, top= 5, barfill = "dodgerblue3") 
+p2 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 2, top= 5, barfill = "dodgerblue3") 
+p3 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 3, top= 5,barfill = "dodgerblue3") 
+p4 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 4, top= 5,barfill = "dodgerblue3")
+
+grid.arrange(p1, p2, p3, p4, ncol=2)
+
+```
+
+```{r}
+pca_result.letter$rotation[,1:5]
+```
+
+```{r}
+factoextra::fviz_pca_biplot(pca_result.letter,
+                geom_ind = "point", # para las observaciones
+                geom_var = c("arrow", "text"), # para las variables
+                col.ind = "cos2", # Colorear los puntos por su calidad de representación
+                gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), # Colores para los puntos
+                repel = F # Evitar la superposición de texto
+                )
+```
+Un valor alto de cos2 para una variable en una componente principal indica que la componente explica una gran parte de la varianza de esa variable. En otras palabras, la variable está bien representada en esa dimensión. Esto significa que la dirección y magnitud de la variable tienen una fuerte correlación con la componente principal.
+
+Similarmente, para los individuos, un alto cos2 en una componente principal sugiere que la posición del individuo en el espacio de las componentes principales está fuertemente determinada por esa componente. Esto puede interpretarse como que el individuo tiene características que son bien capturadas o explicadas por esa componente principal.
+
+
+
+
+## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
+
+
+
+
+
+## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
+
+
+
+
+
+
+## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+
+```{r}
+set.seed(1234)
+letterRecognition.TrainIdx.80<- createDataPartition(LetterRecognition$lettr,
+                                       p=0.8, #Genera un 80% para train, 20% para test
+                                       list = FALSE, #Dame los resultados en una matriz
+                                       times = 1) #Genera solamente una partición 80/20
+
+trainSet.letter <- LetterRecognition[letterRecognition.TrainIdx.80, ]
+testSet.letter <- LetterRecognition[-letterRecognition.TrainIdx.80, ]
+```
+
+
+
+```{r}
+modelLookup(("kknn"))
+```
+
+```{r}
+set.seed(1234)
+kknnControl.letter<- trainControl(method = "cv",
+                           number = 10 ,
+                           returnResamp = "final",
+                           seeds = NULL,
+                           allowParallel = T)
+```
+
+```{r}
+set.seed(1234)
+y = trainSet.letter$lettr
+x = trainSet.letter[,-1]
+
+mygrid.letter <- expand.grid(kmax = seq(5,9,2),
+                      distance = c(1,2,3),
+                      kernel = c(#"rectangular","triangular",
+                                 "optimal" 
+                                 # ,"epanechnikov", "biweight", "triweight" 
+                                 # ,"cos", "inv", "gaussian","rank"
+                                ))
+
+myfit.letter.cv10 <- train(y=y, x=x, 
+               method = "kknn",
+               metric = "Kappa",
+               trControl = kknnControl.letter,
+               tuneGrid=mygrid.letter
+               )
+myfit.letter.cv10$results
+(myfit.letter.cv10.best <- subset(myfit.letter.cv10$results, kmax == myfit.letter.cv10$bestTune$kmax & distance == myfit.letter.cv10$bestTune$distance & kernel == myfit.letter.cv10$bestTune$kernel))
+plot(myfit.letter.cv10)
+
+```
+```{r}
+mygrid.letter <- expand.grid(kmax = seq(9,13,2),
+                      distance = 1,
+                      kernel = c("rectangular","triangular",
+                                 "optimal" 
+                                 # ,"epanechnikov", "biweight", "triweight" 
+                                 # ,"cos", "inv", "gaussian","rank"
+                                ))
+
+myfit.letter.cv10.2 <- train(y=y, x=x, 
+               method = "kknn",
+               metric = "Kappa",
+               trControl = kknnControl.letter,
+               tuneGrid=mygrid.letter
+               )
+myfit.letter.cv10.2$results
+(myfit.letter.cv10.2.best <- subset(myfit.letter.cv10.2$results, kmax == myfit.letter.cv10.2$bestTune$kmax & distance == myfit.letter.cv10.2$bestTune$distance & kernel == myfit.letter.cv10.2$bestTune$kernel))
+plot(myfit.letter.cv10.2)
+```
+
+```{r}
+mygrid.letter <- expand.grid(kmax = 9,
+                      distance = 1,
+                      kernel = c(#"rectangular",
+                                 "triangular"
+                                 #,"optimal" 
+                                  ,"epanechnikov", "biweight", "triweight" 
+                                  ,"cos", "inv", "gaussian","rank"
+                                ))
+
+myfit.letter.cv10.3 <- train(y=y, x=x, 
+               method = "kknn",
+               metric = "Kappa",
+               trControl = kknnControl.letter,
+               tuneGrid=mygrid.letter
+               )
+myfit.letter.cv10.3$results
+(myfit.letter.cv10.3.best <- subset(myfit.letter.cv10.3$results, kmax == myfit.letter.cv10.3$bestTune$kmax & distance == myfit.letter.cv10.3$bestTune$distance & kernel == myfit.letter.cv10.3$bestTune$kernel))
+plot(myfit.letter.cv10.3)
+```
+
+
+```{r}
+ggplot(data = myfit.letter.cv10.3$resample, aes(x = Resample, y = Kappa)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "kknn",
+       x = "Fold number",
+       y = "Kappa")+
+  geom_point(data = myfit.letter.cv10.3$resample, aes(x = Resample, y = Accuracy), color= "red")
+```
+
+
+
+
+
+
+```{r}
+varImp(myfit.letter.cv10.3)
+```
+
+
+
+
+```{r}
+preds.letter <- predict(myfit.letter.cv10.3$finalModel, newdata = testSet.letter)
+
+conf.letter <- confusionMatrix(preds.letter, testSet.letter$lettr)
+conf.letter
+```
+
+```{r, warning=FALSE}
+library(ggdendro)
+# Create the summary dataset
+letter.cluster <- LetterRecognition %>% 
+  group_by(lettr) %>% 
+  summarise_each(funs(mean))
+
+# Tranform the summary dataset to a dataframe
+letter.cluster <- as.data.frame(letter.cluster)
+
+# Assign letters variable as rownames
+rownames(letter.cluster) <- letter.cluster$lettr
+
+# Run the hierarchical clustering 
+clusters <- hclust(dist(letter.cluster))
+
+# Plot the dendogram
+ggdendrogram(clusters, rotate = TRUE, size = 2)+
+  labs(title = "Dendogram of hierarchical clustering model")
+
+pheatmap(t(letter.cluster[,-1]),
+         clustering_method = "ward.D2",
+         color = colorRampPalette(c("#00AFBB", "white", "#FC4E07"))(255), # Paleta de colores
+         cellwidth = 10,
+         cellheight = 10,
+#         breaks = seq(-1, 1, length.out = 256),
+         scale = "none", 
+         annotation_legend = TRUE, angle_col = 0)
+```
+
+```{r}
+conf_matrix_long <- as.data.frame(conf.letter$table)
+
+ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "white", high = "#FC4E07", mid ="#00AFBB", midpoint = 5, limit = c(0, 10)) +
+  theme_minimal() +
+  labs(x = "Predicted", y = "Reference", fill = "Count") +
+  geom_text(aes(x=Reference, y = Prediction, label=ifelse(Freq > 0, paste(Reference, Prediction), "")), size = 2)
+
+
+```
+
+
+```{r}
+# Evaluar el rendimiento en el conjunto de entrenamiento
+trainPredictions <- predict(myfit.letter.cv10.3$finalModel, trainSet.letter)
+conf_train <- confusionMatrix(trainPredictions, trainSet.letter$lettr)
+
+# Evaluar el rendimiento en el conjunto de prueba
+testPredictions <- predict(myfit.letter.cv10.3$finalModel, testSet.letter)
+conf_test <- confusionMatrix(testPredictions, testSet.letter$lettr)
+
+conf_train$overall
+conf_test$overall
+```
+
+
+
+```{r}
+modelLookup(("naive_bayes"))
+```
+
+```{r}
+NBControl.letter<- trainControl(method = "cv",
+                           number = 10 ,
+                           returnResamp = "final",
+                           allowParallel = T)
+```
+
+```{r}
+set.seed(1234)
+y = trainSet.letter$lettr
+x = trainSet.letter[,-1]
+
+mygrid.letter = expand.grid(laplace = seq(0,10,2),
+                      usekernel = TRUE,
+                      adjust = seq(1,11,2))
+
+myfit.letter.cv10.NB <- train(y=y, x=x, 
+               method = "naive_bayes",
+               metric = "Kappa",
+               trControl = NBControl.letter,
+               tuneGrid=mygrid.letter
+               )
+myfit.letter.cv10.NB$results
+(myfit.letter.cv10.NB.best <- subset(myfit.letter.cv10.NB$results, laplace == myfit.letter.cv10.NB$bestTune$laplace & usekernel == myfit.letter.cv10.NB$bestTune$usekernel & adjust == myfit.letter.cv10.NB$bestTune$adjust))
+plot(myfit.letter.cv10.NB)
+```
+
+# Diabetes BRFSS
+
+Los datos de este dataset se localizan en el paquete R mlbench.
+
+```{r}
+diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
+```
+
+
+## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
+
+```{r}
+glimpse(diabetesBRFSS2015)
+diabetesBRFSS2015.info()
+```
+
+
+
+
+
+
+
+
+## Pregunta 2. Explica qué representan los ejemplos
+
+https://archive.ics.uci.edu/dataset/891/cdc+diabetes+health+indicators
+
+
+
+
+```{r}
+diabetesBRFSS2015[] <- lapply(diabetesBRFSS2015, as.factor)
+diabetesBRFSS2015$BMI <- as.numeric(diabetesBRFSS2015$BMI)
+diabetesBRFSS2015$MentHlth <- as.numeric(diabetesBRFSS2015$MentHlth)
+diabetesBRFSS2015$PhysHlth <- as.numeric(diabetesBRFSS2015$PhysHlth)
+diabetesBRFSS2015$Diabetes_binary <- factor(diabetesBRFSS2015$Diabetes_binary, levels= c(0,1), labels = c("Healthy", "Diabetic"))
+
+Hmisc::describe(diabetesBRFSS2015)
+glimpse(diabetesBRFSS2015)
+```
+
+
+
+
+## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
+
+```{r}
+n<-nrow(diabetesBRFSS2015)
+
+diabetesBRFSS2015 %>%
+  group_by(Diabetes_binary) %>%
+  summarize(Frequency = n()/n *100) %>%
+  ungroup() %>%
+  ggplot(aes(x = Diabetes_binary, y = Frequency, fill =Diabetes_binary)) +
+  geom_col(position = position_dodge(), alpha = 0.7) +
+  scale_fill_viridis_d() +
+  theme_minimal() +
+  guides(fill = FALSE)+
+  ylim(c(0,100)) +
+  xlab("")+ ylab("Percentage %") + ggtitle("Percentage of Diabetic and Healthy people")
+
+
+
+```
+
+
+```{r}
+# Incluye Diabetes_binary en el pivot_longer, si es necesario
+data_long <- pivot_longer(diabetesBRFSS2015[,c(-5, -15, -16, -17, -20, -21, -22)], cols = -c(Diabetes_binary), 
+                          names_to = "Variable", values_to = "Value")
+
+plots <- list()
+
+for(variable in unique(data_long$Variable)) {
+  # Asegura que Diabetes_binary sea factor si aún no lo es
+  data_long$Diabetes_binary <- factor(data_long$Diabetes_binary)
+  
+  # Calcula el porcentaje de Diabetes_binary por cada Value en la variable actual
+  data_filtered <- data_long %>%
+    filter(Variable == variable) %>%
+    group_by(Value, Diabetes_binary) %>%
+    summarize(Frequency = n(), .groups = 'drop') %>%
+    mutate(Percentage = Frequency / sum(Frequency) * 100) %>%
+    ungroup()
+  
+  # Crea el gráfico
+  p <- ggplot(data_filtered, aes(x = Value, y = Percentage, fill = Diabetes_binary)) +
+    geom_col(position = position_dodge(), alpha = 0.7) +
+    scale_fill_viridis_d() +
+    theme_minimal() +
+    labs(title = variable,
+         x = "", y = "Percentage") +
+    theme(legend.position = "none")
+  
+  # Guarda el gráfico en la lista
+  plots[[variable]] <- p
+}
+
+
+grid.arrange(plots$HighBP, plots$HighChol, plots$CholCheck, plots$Smoker, plots$Stroke, plots$HeartDiseaseorAttack, ncol=3)
+
+grid.arrange(plots$PhysActivity, plots$Fruits, plots$Veggies, plots$HvyAlcoholConsump, plots$AnyHealthcare, plots$NoDocbcCost, ncol=3)
+
+grid.arrange(plots$DiffWalk, plots$Sex, ncol=3)
+
+```
+
+```{r}
+# Incluye Diabetes_binary en el pivot_longer, si es necesario
+data_long <- pivot_longer(diabetesBRFSS2015[,c(1,15, 20, 21, 22)], cols = -c(Diabetes_binary), 
+                          names_to = "Variable", values_to = "Value")
+
+plots <- list()
+
+for(variable in unique(data_long$Variable)) {
+  # Asegura que Diabetes_binary sea factor si aún no lo es
+  data_long$Diabetes_binary <- factor(data_long$Diabetes_binary)
+  
+  # Calcula el porcentaje de Diabetes_binary por cada Value en la variable actual
+  data_filtered <- data_long %>%
+    filter(Variable == variable) %>%
+    group_by(Value, Diabetes_binary) %>%
+    summarize(Frequency = n(), .groups = 'drop') %>%
+    mutate(Percentage = Frequency / sum(Frequency) * 100) %>%
+    ungroup()
+  
+  # Crea el gráfico
+  p <- ggplot(data_filtered, aes(x = Value, y = Percentage, fill = Diabetes_binary)) +
+    geom_col(position = position_dodge(), alpha = 0.7) +
+    scale_fill_viridis_d() +
+    theme_minimal() +
+    labs(title = variable,
+         x = "", y = "Percentage") +
+    theme(legend.position = "none")
+  
+  # Guarda el gráfico en la lista
+  plots[[variable]] <- p
+}
+
+
+grid.arrange(plots$GenHlth, plots$Age, plots$Education, plots$Income, ncol=2)
+```
+
+
+```{r}
+p1 <- ggplot(data=diabetesBRFSS2015, aes(x=BMI, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_density(adjust=1.5, alpha=.4) +
+   scale_fill_viridis_d()+
+  theme_minimal()+ 
+  theme(legend.position = "none")
+
+p2 <- ggplot(data=diabetesBRFSS2015, aes(x=BMI, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_density(adjust=1.5, alpha=.4, position = "fill") +
+   scale_fill_viridis_d()+
+  theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r}
+p1 <- ggplot(data=diabetesBRFSS2015, aes(x=MentHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_density(adjust=1.5, alpha=.4) +
+   scale_fill_viridis_d()+
+  theme_minimal()+ 
+  theme(legend.position = "none")+
+  xlab("days")
+
+p2 <- ggplot(data=diabetesBRFSS2015, aes(x=MentHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_density(adjust=1.5, alpha=.4, position = "fill") +
+   scale_fill_viridis_d()+
+  theme_minimal()+
+  xlab("days")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r}
+p1 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_density(adjust=1.5, alpha=.4) +
+   scale_fill_viridis_d()+
+  theme_minimal()+ 
+  theme(legend.position = "none")+
+  xlab("days")
+
+p2 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_density(adjust=1.5, alpha=.4, position = "fill") +
+   scale_fill_viridis_d()+
+  theme_minimal()+
+  xlab("days")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+
+
+## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
+
+```{r}
+# Convertir todas las columnas a numéricas
+data_numeric <- diabetesBRFSS2015 %>% mutate(across(everything(), as.numeric))
+
+# Calcular correlaciones
+correlations <- cor(data_numeric, use = "complete.obs")
+
+# Extraer correlaciones de Diabetes_binary y crear un dataframe
+cor_df <- data.frame(correlations["Diabetes_binary", ])
+
+# Preparar los datos para graficar
+cor_df$Variable <- rownames(cor_df)
+cor_df <- cor_df %>% filter(Variable != "Diabetes_binary")
+names(cor_df)[1] <- "Correlation"
+cor_df <- cor_df %>% arrange(desc(Correlation))
+
+# Asegúrate de que la variable 'Variable' esté ordenada por 'Correlation' correctamente antes de graficar
+cor_df$Variable <- factor(cor_df$Variable, levels = cor_df$Variable[order(cor_df$Correlation, decreasing = TRUE)])
+
+# Graficar usando el factor ordenado
+ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
+  geom_col() +
+  coord_flip() +
+   labs(title = "Correlaciones con Diabetes_binary", x = "", y = "Correlación", fill = "Diabetes") +
+  scale_fill_viridis_c() 
+  
+
+```
+
+
+
+## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
+
+
+
+
+
+## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
+
+
+```{r}
+ONE HOT CODING
+```
+
+
+
+## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+
+```{r}
+set.seed(1234)
+diabetes.TrainIdx.80 <- createDataPartition(diabetesBRFSS2015$Diabetes_binary,
+                                       p=0.8, #Genera un 80% para train, 20% para test
+                                       list = FALSE, #Dame los resultados en una matriz
+                                       times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes <- diabetesBRFSS2015[diabetes.TrainIdx.80, ]
+testSet.diabetes <- diabetesBRFSS2015[-diabetes.TrainIdx.80, ]
+```
+
+
+
+```{r}
+modelLookup(("naive_bayes"))
+```
+
+```{r}
+set.seed(1234)
+NBControl.diabetes <- trainControl(method = "repeatedcv",
+                           number = 10 ,
+                           repeats = 3,
+                           returnResamp = "final",
+                           seeds = NULL,
+                           allowParallel = T)
+```
+
+```{r}
+set.seed(1234)
+y = trainSet.diabetes$Diabetes_binary
+x = trainSet.diabetes[,-1]
+
+mygrid.diabetes <- expand.grid(laplace = seq(1, 10, 2),
+                      usekernel = F,
+                      adjust = seq(1, 10, 2))
+
+myfit.diabetes.cv10.nb <- train(y=y, x=x, 
+               method = "naive_bayes",
+               metric = "Accuracy",
+               trControl = NBControl.diabetes,
+               tuneGrid=mygrid.diabetes
+               )
+myfit.diabetes.cv10.nb$results
+(myfit.diabetes.cv10.nb.best <- subset(myfit.diabetes.cv10.nb$results, laplace == myfit.diabetes.cv10.nb$bestTune$laplace & usekernel == myfit.diabetes.cv10.nb$bestTune$usekernel & adjust == myfit.diabetes.cv10.nb$bestTune$adjust))
+plot(myfit.diabetes.cv10.nb)
+
+```
+
+```{r}
+ggplot(data = myfit.diabetes.cv10.nb$resample, aes(x = Resample, y = Accuracy)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "naive_bayes",
+       x = "Fold number",
+       y = "Accuracy")
+```
+
+
+
+```{r}
+set.seed(1234)
+y = trainSet.letter$lettr
+x = trainSet.letter[,-1]
+
+mygrid.letter.2 <- expand.grid(kmax = 7,
+                      distance = seq(2,6,2),
+                      kernel = "triangular")
+
+myfit.letter.cv10.2 <- train(y=y, x=x, 
+               method = "kknn",
+               metric = "Kappa",
+               trControl = kknnControl.letter,
+               tuneGrid=mygrid.letter.2
+               )
+myfit.letter.cv10.2$results
+(myfit.letter.cv10.2.best <- subset(myfit.letter.cv10.2$results, kmax == myfit.letter.cv10.2$bestTune$kmax & distance == myfit.letter.cv10.2$bestTune$distance & kernel == myfit.letter.cv10.2$bestTune$kernel))
+plot(myfit.letter.cv10.2)
+
+```
+
+
+
+
+
+```{r}
+varImp(myfit.diabetes.cv10.nb)
+```
+
+
+```{r}
+preds.diabetes <- predict(myfit.diabetes.cv10.nb$finalModel, newdata = testSet.diabetes)
+
+conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binary)
+conf.diabetes
+```
+
+```{r, warning=FALSE}
+library(ggdendro)
+# Create the summary dataset
+letter.cluster <- LetterRecognition %>% 
+  group_by(lettr) %>% 
+  summarise_each(funs(mean))
+
+# Tranform the summary dataset to a dataframe
+letter.cluster <- as.data.frame(letter.cluster)
+
+# Assign letters variable as rownames
+rownames(letter.cluster) <- letter.cluster$lettr
+
+# Run the hierarchical clustering 
+clusters <- hclust(dist(letter.cluster))
+
+# Plot the dendogram
+ggdendrogram(clusters, rotate = TRUE, size = 2)+
+  labs(title = "Dendogram of hierarchical clustering model")
+
+pheatmap(t(letter.cluster[,-1]),
+         clustering_method = "ward.D2",
+         color = colorRampPalette(c("#00AFBB", "white", "#FC4E07"))(255), # Paleta de colores
+         cellwidth = 10,
+         cellheight = 10,
+#         breaks = seq(-1, 1, length.out = 256),
+         scale = "none", 
+         annotation_legend = TRUE, angle_col = 0)
+```
+
+```{r}
+conf_matrix_long <- as.data.frame(conf.diabetes$table)
+
+ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "white", high = "#FC4E07", mid ="#00AFBB") +
+  theme_minimal() +
+  labs(x = "Predicted", y = "Reference", fill = "Count") 
+#  geom_text(aes(x=Reference, y = Prediction, label=ifelse(Freq > 0, paste(Reference, Prediction), "")), size = 2)
+
+
+```
+
+
+```{r}
+# Evaluar el rendimiento en el conjunto de entrenamiento
+trainPredictions <- predict(myfit.letter.cv10.2$finalModel, trainSet.letter)
+confusionMatrix(trainPredictions, trainSet.letter$lettr)
+
+# Evaluar el rendimiento en el conjunto de prueba
+testPredictions <- predict(myfit.letter.cv10.2$finalModel, testSet.letter)
+confusionMatrix(testPredictions, testSet.letter$lettr)
+```
+
+
+-----
+```{r}
+set.seed(1234)
+kknnControl.diabetes <- trainControl(method = "cv",
+                           number = 10 ,
+                           returnResamp = "final",
+                           seeds = NULL,
+                           allowParallel = T)
+```
+
+```{r}
+set.seed(1234)
+y = trainSet.diabetes$Diabetes_binary
+x = trainSet.diabetes[,-1]
+
+mygrid.diabetes <- expand.grid(kmax = seq(5,9,2),
+                      distance = c(1,2,3),
+                      kernel = c(#"rectangular","triangular",
+                                 "optimal" 
+                                 # ,"epanechnikov", "biweight", "triweight" 
+                                 # ,"cos", "inv", "gaussian","rank"
+                                ))
+
+myfit.diabetes.cv10.kknn <- train(y=y, x=x, 
+               method = "kknn",
+               metric = "Kappa",
+               trControl = kknnControl.diabetes,
+               tuneGrid= mygrid.diabetes
+               )
+myfit.diabetes.cv10.kknn$results
+(myfit.diabetes.cv10.kknn.best <- subset(myfit.diabetes.cv10.kknn$results, kmax == myfit.diabetes.cv10.kknn$bestTune$kmax & distance == myfit.diabetes.cv10.kknn$bestTune$distance & kernel == myfit.diabetes.cv10.kknn$bestTune$kernel))
+plot(myfit.diabetes.cv10.kknn)
+
+```
+
+
+
+
+
+
+
+
