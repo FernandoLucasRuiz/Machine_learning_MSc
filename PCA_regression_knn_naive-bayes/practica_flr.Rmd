@@ -38,9 +38,8 @@ library(kknn)
 library(pheatmap) # heatmap 
 library(REdaS) # Para test esfericidad de Bartlett
 library(factoextra) #Gráficas PCA
-library(REdaS)
+library(REdaS) # Análisis PCA
 ```
-
 
 # BostonHousingData
 
@@ -51,16 +50,21 @@ library(mlbench)
 data(BostonHousing)
 ```
 
-
 ## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
 
 ```{r}
 str(BostonHousing)
 ```
+
 El dataset contiene 506 filas y 14 variables.
 
 Todas las variables son de tipo numérico excepto la variable chas o Charles River dummy variable.
 
+Un primer vistazo a los datos numéricos para ver si tiene nulos, la distribución, búsqueda de variables categóricas, etc
+
+```{r}
+Hmisc::describe(BostonHousing)
+```
 
 ## Pregunta 2. Explica qué representan los ejemplos
 
@@ -68,39 +72,34 @@ Este dataset incluye información sobre diferentes zonas de Boston, detalladas a
 
 Las variables del dataset son:
 
-1. crim: Tasa de criminalidad per cápita por ciudad.
-2. zn: Proporción de terreno residencial zonificado para lotes de más de 25,000 pies cuadrados.
-3. indus: Proporción de acres de negocio no minorista por ciudad.
-4. chas: Variable ficticia Charles River (= 1 si el tramo limita con el río; 0 de lo contrario).
-5. nox: Concentración de óxidos nítricos (partes por 10 millones).
-6. rm: Número promedio de habitaciones por vivienda.
-7. age: Proporción de unidades ocupadas por sus propietarios construidas antes de 1940.
-8. dis: Distancias ponderadas a cinco centros de empleo de Boston.
-9. rad: Índice de accesibilidad a autopistas radiales.
-10. tax: Tasa de impuesto a la propiedad de valor total por $10,000.
+1.  crim: Tasa de criminalidad per cápita por ciudad.
+2.  zn: Proporción de terreno residencial zonificado para lotes de más de 25,000 pies cuadrados.
+3.  indus: Proporción de acres de negocio no minorista por ciudad.
+4.  chas: Variable ficticia Charles River (= 1 si el tramo limita con el río; 0 de lo contrario).
+5.  nox: Concentración de óxidos nítricos (partes por 10 millones).
+6.  rm: Número promedio de habitaciones por vivienda.
+7.  age: Proporción de unidades ocupadas por sus propietarios construidas antes de 1940.
+8.  dis: Distancias ponderadas a cinco centros de empleo de Boston.
+9.  rad: Índice de accesibilidad a autopistas radiales.
+10. tax: Tasa de impuesto a la propiedad de valor total por \$10,000.
 11. ptratio: Ratio alumno-profesor por ciudad.
-12. black: 1000(Bk - 0.63)^2 donde Bk es la proporción de personas negras por ciudad.
+12. black: 1000(Bk - 0.63)\^2 donde Bk es la proporción de personas negras por ciudad.
 13. lstat: Porcentaje de población de estatus bajo.
 14. medv: Valor mediano de las casas ocupadas por sus propietarios en miles de dólares.
 
 Para ver un poco más en detalle los datos vamos a representarlos en gráficas para ver cómo son sus distribuciones o si podemos sacar alguna conclusión previa.
 
 ```{r}
-ggplot(BostonHousing, aes(x= medv)) +
-  geom_histogram(fill ="#f1e6b2", color = "black")+
-  theme_minimal() 
-```
-
-```{r}
+plots <- list()
 for (i in 1:14) {
   # Crea una gráfica para cada variable
   p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i])) +
     geom_density(adjust=1.5, alpha=.7, fill="#f1e6b2") +
     theme_minimal() +
     labs(title = names(BostonHousing)[i],
-         x = names(pca)[i]) 
+         x = names(BostonHousing)[i]) 
 
-  plots[[colnames(pca)[i]]] <- p
+  plots[[colnames(BostonHousing)[i]]] <- p
 }
 
 plots$chas <- ggplot(BostonHousing, aes(x=chas)) +
@@ -115,23 +114,23 @@ grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
 plots$chas
 ```
 
-1. Crim: Observamos que la tasa de criminalidad es baja aunque existen zonas en los datos que se llega a tasas muy altas de indice de criminalidad de hasta más de 80, que pueden ser los barrios problemáticos de la ciudad de Boston
+1.  Crim: Observamos que la tasa de criminalidad es baja aunque existen zonas en los datos que se llega a tasas muy altas de indice de criminalidad de hasta más de 80, que pueden ser los barrios problemáticos de la ciudad de Boston
 
-2. Zn: Esta gráfica nos quiere decir que no hay muchas zonas residenciales, aunque hay dos picos intermedios sobre 23 y 80 que puede ser barrios residenciales.
+2.  Zn: Esta gráfica nos quiere decir que no hay muchas zonas residenciales, aunque hay dos picos intermedios sobre 23 y 80 que puede ser barrios residenciales.
 
-3. Indus: Hay dos zonas de Boston con negocios de minoristas
+3.  Indus: Hay dos zonas de Boston con negocios de minoristas
 
-4. Nox: La mayoria de zonas de Boston tienen una densidad de 0.4 y 0.6 ppm de oxido nitrico aunque hay otras menos que llegan hasta 0.9 ppm.
+4.  Nox: La mayoria de zonas de Boston tienen una densidad de 0.4 y 0.6 ppm de oxido nitrico aunque hay otras menos que llegan hasta 0.9 ppm.
 
-5. Rm: El número promedio de habitaciones en Boston son de aproximadamente 6 habitaciones por vivienda.
+5.  Rm: El número promedio de habitaciones en Boston son de aproximadamente 6 habitaciones por vivienda.
 
-6. Age: Como vemos, la matoria de casas de Boston están construidas antes 1940. La cola a la izquierda nos puede sugerir que se están construyendo casas nuevas en Boston.
+6.  Age: Como vemos, la matoria de casas de Boston están construidas antes 1940. La cola a la izquierda nos puede sugerir que se están construyendo casas nuevas en Boston.
 
-7. Dis : Esta gráfica nos indica que la mayoría de zonas se encuentran cerca de centros de empleo indicando que podría ser el centro de la ciudad, aunque la cola de la derecha nos indica que puede que los barrios residenciales se encuentren a las afueras de la ciudad.
+7.  Dis : Esta gráfica nos indica que la mayoría de zonas se encuentran cerca de centros de empleo indicando que podría ser el centro de la ciudad, aunque la cola de la derecha nos indica que puede que los barrios residenciales se encuentren a las afueras de la ciudad.
 
-8. Rad: Esta gráfica nos muestra que la mayoría de zonas se encuentran bien comunicadas con autopistas, pero hay una cierta densidad de zonas lejanas a autopistas por lo que podría indicar que son zonas residenciales o marginadas.
+8.  Rad: Esta gráfica nos muestra que la mayoría de zonas se encuentran bien comunicadas con autopistas, pero hay una cierta densidad de zonas lejanas a autopistas por lo que podría indicar que son zonas residenciales o marginadas.
 
-9. Tax: Esto nos indica que hay una distribución normal de las tasas excepto unas zonas que pagan más impuestos. Nos sugiere que puede ser una zona residencial de lujo.
+9.  Tax: Esto nos indica que hay una distribución normal de las tasas excepto unas zonas que pagan más impuestos. Nos sugiere que puede ser una zona residencial de lujo.
 
 10. Ptratio: La mayoría se situa sobre 20 alumnos por profesor. La distribución se ensancha en la cola izquierda porque en colegios privados el ratio suele disminuir.
 
@@ -140,8 +139,6 @@ plots$chas
 12. Lstat: La tasa de personas con estatus bajo ronda el 8% pero la cola de la derecha nos sugiere que hay zonas donde el porcentaje sube por lo que puede ser zonas marginales.
 
 13. Chas: La mayoría de zonas están alejadas del rio Charles
-
-
 
 ## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
 
@@ -169,11 +166,12 @@ p2<- ggplot(BostonHousing, aes(x=medv))+
 
 grid.arrange(p1, p2, ncol=1)
 ```
-La mayoría de casas valen alrededor de 20.000 a 23.000 dolares. Vemos algunos casos interesantes que podemos tener en cuenta que hay varias casas que no siguen una tendencia normal ya que hay un pico de unas observaciones cuyos valores son de 50.000 dolares. 
+
+La mayoría de casas valen alrededor de 20.000 a 23.000 dolares. Vemos algunos casos interesantes que podemos tener en cuenta que hay varias casas que no siguen una tendencia normal ya que hay un pico de unas observaciones cuyos valores son de 50.000 dolares.
 
 Vamos a ver ahora cómo se correlaciona la variable medv con las variables predictoras
 
-```{r}
+```{r, warning=FALSE}
 plots <- list()
 for (i in 1:13) {
   # Crea una gráfica para cada variable
@@ -207,17 +205,17 @@ plots$chas
 
 Un resumen de lo visto en los gráficos de puntos:
 
-1. Crim: el precio de los barrios con mayor indice de crimininalidad es menor.
-2. zn: Se aprecia una ligera relación positiva en esta variable
-3. indus: A mayor proporcion de negocios no minorista, el precio de la vivienda cae. 
-4. nox: Se ve una ligera tenendecia a que cuanto mayor es la cantidad de oxido nitrico menor es el precio de las viviendas. Es decir, las zonas más alejadas de la ciudad tendrán un valor mayor en el mercado.
-5. rm: Se ve una clara correlación positiva entre el número de habitaciones y el precio de la vivienda.
-6. age: Se intuye que en los barrios más modernos el precio es ligeramente superior al casco antiguo.
-7. dis: Las zonas más alejadas de la ciudad parece ser que tienen los precios de viviendas más caros
-8. rad: Parece ser que hay barrios con poca accesibilidad a la autopista y son aquellos con un precio más bajo. Hay algunos barrios donde el precio de la vivienda es muy alto y también tiene poca accesibilidad. Puede ser que sean zonas de residencia de lujo.
-9. tax: Se ve una ligera correlacion negativa en esta variable.
+1.  Crim: el precio de los barrios con mayor indice de crimininalidad es menor.
+2.  zn: Se aprecia una ligera relación positiva en esta variable
+3.  indus: A mayor proporcion de negocios no minorista, el precio de la vivienda cae.
+4.  nox: Se ve una ligera tenendecia a que cuanto mayor es la cantidad de oxido nitrico menor es el precio de las viviendas. Es decir, las zonas más alejadas de la ciudad tendrán un valor mayor en el mercado.
+5.  rm: Se ve una clara correlación positiva entre el número de habitaciones y el precio de la vivienda.
+6.  age: Se intuye que en los barrios más modernos el precio es ligeramente superior al casco antiguo.
+7.  dis: Las zonas más alejadas de la ciudad parece ser que tienen los precios de viviendas más caros
+8.  rad: Parece ser que hay barrios con poca accesibilidad a la autopista y son aquellos con un precio más bajo. Hay algunos barrios donde el precio de la vivienda es muy alto y también tiene poca accesibilidad. Puede ser que sean zonas de residencia de lujo.
+9.  tax: Se ve una ligera correlacion negativa en esta variable.
 10. ptratio: Las zonas con las viviendas más caras tienen un ratio más bajo de alumno-profesorado.
-11. b: No se una relación clara 
+11. b: No se una relación clara
 12. lstat: Esta relación es bastante clara, ya que las personas con estatus bajo viven en zonas con el precio de la vivienda bajo
 13. chas: La descompesación de las clases no nos deja dar una conclusión aunque parece que las zonas cercanas al rio Charles aumentan el precio de la vivienda
 
@@ -242,10 +240,11 @@ ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
 
 En esta gráfica de correlación vemos que la variable mas correlacionado con la variable medv es aquella variable que mide el numero de personas con estatus bajo (lstat) con una correlación negativa. Luego hay otras como ptratio, indus o tax. La variable con mayor correlación positiva es el número de habitaciones (rm), seguida de la variable con mayor zonas residenciales (zn).
 
-
 ## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
 
-Para contrastar si nuestros datos son adecuados para hacer el analisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
+El PCA es una técnica estadística que permite reducir la dimensionalidad de los datos, manteniendo al mismo tiempo la mayor cantidad de variación posible. Esto se logra identificando las direcciones (componentes principales) en las cuales los datos varían más. Además de reducir la dimensionalidad, el PCA puede ofrecer insights sobre la estructura subyacente de los datos, incluidos los sesgos potenciales.
+
+Para contrastar si nuestros datos son adecuados para hacer el análisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
 
 En ambos tests rechazamos la hipotesis nula por lo que nuestros datos son adecuados para realizar el PCA Además el test KMO nos da un criterio de 0.86 que es un criterio alto de adecuación para el PCA.
 
@@ -254,8 +253,7 @@ bart_spher(BostonHousing[,c(-4,-14)])
 KMOS(BostonHousing[,c(-4,-14)])
 ```
 
-
-Primero vamos a ver si escalamos los datos
+Para aplicar el PCA de manera correcta, es esencial determinar si nuestros datos requieren un escalado apropiado.
 
 ```{r}
 datos_long_boston <- pivot_longer(BostonHousing, cols = -chas, names_to = "Variable", values_to = "Valor")
@@ -270,23 +268,22 @@ ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
     axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  
     axis.text.y = element_text(size = 8),  
     axis.title = element_text(size = 10),  
-    axis.title.x = element_text(margin = margin(t = 10), size = 14, hjust = 0.5),  
-    axis.title.y = element_text(margin = margin(r = 10), size = 14, hjust = 0.5)  
+    axis.title.x = element_text(margin = margin(t = 10), hjust = 0.5),  
+    axis.title.y = element_text(margin = margin(r = 10), hjust = 0.5)  
   ) +
-  ggtitle("Variables del Boston Housing Dataset (sin CHAS)") +
-  xlab("VARIABLES") +
-  ylab("VALOR")
+  ggtitle("Variables") +
+  xlab("Variables") +
+  ylab("Count")
 ```
 
-Vemos que los datos no se distribuyen de la misma manera, por lo que vamos a escalar los datos en el PCA.
-
+Se debe prestar atención a variables como "tax" y "b", las cuales se caracterizan por tener valores significativamente mayores en comparación con el resto de las variables en nuestro conjunto de datos. Este desequilibrio en la magnitud de los valores puede influir en el resultado del PCA, haciendo indispensable un ajuste de escala para asegurar una interpretación precisa y equitativa de los componentes principales.
 
 ```{r}
-pca_result <- prcomp(BostonHousing[,c(-4,-14)], scale = TRUE)
+pca_result_boston <- prcomp(BostonHousing[,c(-4,-14)], scale = TRUE)
 ```
 
 ```{r}
-var_exp <- pca_result$sdev^2
+var_exp <- pca_result_boston$sdev^2
 prop_var_exp <- var_exp / sum(var_exp)
 cum_var_exp <- cumsum(prop_var_exp)
 
@@ -299,7 +296,7 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
   geom_line(aes(group = 1), color = "blue") +
   geom_point(color = "blue") +
   theme_minimal() +
-  labs(x = "Principal components", y = "Variance", title = "Scree Plot no scaled") +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plots") +
   ylim(c(0,1)) +
   geom_line(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
   geom_point(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color = "red") +
@@ -308,10 +305,10 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[1:10,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-Con 5 componentes principales se explica el 85% de la varianza por lo que continuaremos con esos datos para ver si hay sesgos en los datos con un heatmap de las correlaciones.
+Las cinco componentes principales primeras explican el 85% de la varianza total, lo que nos permite avanzar con este conjunto de datos para investigar la presencia de sesgos mediante un mapa de calor que visualiza las correlaciones. Es notable que la primera componente principal por sí sola aclare más del 50% de la varianza, destacando su significativa contribución a la comprensión de la estructura de los datos.
 
 ```{r}
-sesgos <- cor(pca_result$x[,1:5], BostonHousing[,c(-4,-14)])
+sesgos <- cor(pca_result_boston$x[,1:5], BostonHousing[,c(-4,-14)])
 
 pheatmap(sesgos,
          clustering_method = "ward.D2",
@@ -320,13 +317,14 @@ pheatmap(sesgos,
          cellheight = 20,
          breaks = seq(-1, 1, length.out = 256),
          scale = "none", 
-         annotation_legend = TRUE)
+         annotation_legend = TRUE,
+         angle_col = 45)
 ```
-Vemos claramente que el componente principal 1 genera dos grupos con los predictores. Ahora vamos a ver si la varible dependiente se ve influida por ese sesgo, además de ver la distribución de los variables predictoras entre las dos primeras componentes principales.
 
+Observamos que la componente principal 1 desempeña un papel fundamental en la diferenciación de los clusters, destacándose como el principal factor de separación. Curiosamente, las variables que presentan una menor correlación con la Componente Principal 1 (b, rm, zn, dis) coinciden con aquellas que muestran una mayor correlación con la variable medv, y viceversa, en el apartado de la pregunta 3 de este documento. Este patrón sugiere que dichas variables son especialmente adecuadas para inferir el precio medio de la vivienda, lo que indica su relevancia y utilidad en el análisis de los factores que determinan el valor medio de las casas en Boston.
 
 ```{r, warning=FALSE}
-pca <- as.data.frame(pca_result$x[,1:5], stringsAsFactors=F)
+pca <- as.data.frame(pca_result_boston$x[,1:5], stringsAsFactors=F)
 pca <- cbind(BostonHousing, pca)
 
 plots <- list()
@@ -336,121 +334,143 @@ for (i in 1:14) {
     geom_point() +
     labs(title = names(pca)[i],
          x = names(pca)[15], y = names(pca)[16], color = names(pca)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
+    scale_color_gradient(low = "#D3D3D3", high = "#FC4E07") +
     geom_point() +
     xlab("PC 1 ") +
-    ylab("PC 2")
+    ylab("PC 2")+
+    theme_minimal()
 
   plots[[colnames(pca)[i]]] <- p
 }
 
+plots$chas <- ggplot(pca, aes(x = PC1, y = PC2, color = chas)) +  
+  geom_point() +
+  labs(title = "chas", x = "PC 1", y = "PC 2", color = "CHAS") +
+  scale_color_manual(values = c("0" = "#D3D3D3", "1" = "#FC4E07")) +  
+  theme_minimal()  
+
 grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)
 grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
 grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
-plots$medv
+grid.arrange(plots$chas, plots$medv, ncol=2, nrow=2)
 ```
-Como observamos en esta última figura, que la distribución de los datos más altos de medv se van hacia la izquierda de la PC1, por lo que podría existir una buena generación de nuestro modelo predictivo.
+
+Como ya veiamos en el heatmap, hay un sesgo claro en nuestros datos ya que nuestros datos del PCA generan dos clusters grandes.Observamos que seis barrios se distancian significativamente del resto, ubicados en la zona inferior derecha del gráfico.
+
+El cluster con forma redondeada, que podría interpretarse como el núcleo urbano de Boston, se caracteriza por su óptima accesibilidad a las autopistas (rad), un régimen tributario más elevado (tax), una concentración superior de edificaciones antiguas (age), niveles más altos de óxidos de nitrógeno (nox), y una mayor densidad de zonas industriales (indus).
+
+Por contraste, el segundo cluster alargado sugiere una transición hacia la periferia, como lo indica el aumento en la distancia media a centros de empleo (dis). Este patrón se ve reflejado en la reducción progresiva de zonas industriales (indus) hacia las afueras, dando paso a un incremento de áreas residenciales (zn), especialmente evidente en la extensión del cluster elongado. Adicionalmente, la presencia de viviendas con un mayor número promedio de habitaciones (rm) hacia la izquierda del cluster refuerza esta noción de expansión urbana.
+
+Un detalle revelador es la existencia de un barrio céntrico con un porcentaje inusualmente bajo de residentes negros (b). Sin embargo, los datos no proporcionan más características distintivas de este barrio.
+
+La proximidad al río Charles (chas) en el cluster redondeado parece delinear una zona de exclusividad en el corazón de la ciudad, donde los valores inmobiliarios (medv) son sustancialmente más altos y las viviendas ostentan un número mayor de habitaciones en comparación con el resto del centro urbano.
+
+Enfocando la atención en los seis outliers en la esquina inferior derecha, se aprecian índices de criminalidad (crim) más elevados y un porcentaje más alto de personas de estatus socioeconómico bajo (lstat). Estos barrios presentan una marcada diversidad racial ya que, o son exlusivamente personas negras o personas blancas (b), y están situados cerca de las autopistas, caracteristica de barrios marginales por el tráfico de drogas.
+
+Finalmente, al examinar la variable dependiente medv, se deduce que la distancia del núcleo urbano correlaciona con un incremento en el valor de las viviendas, que tienden a ser más espaciosas y situadas en zonas predominantemente residenciales. El sector adyacente al río Charles en el núcleo urbano se destaca por su alto valor inmobiliario. En contraste, las áreas con una tasa de criminalidad más alta tienden a coincidir con los precios de vivienda más bajos, lo que señala una relación inversa entre seguridad y valor inmobiliario.
+
+Vamos a ver ahora la importancia de las variables a cada una de las componentes principales.
 
 ```{r}
-fviz_pca_var(pca_result, col.var="cos2",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE, axes = c(1,2), label = "var"
-             )
-```
-```{r}
-p1 <- fviz_cos2(pca_result, choice = "var", axes = 1, top= 5, barfill = "dodgerblue3") 
-p2 <- fviz_cos2(pca_result, choice = "var", axes = 2, top= 5, barfill = "dodgerblue3") 
-p3 <- fviz_cos2(pca_result, choice = "var", axes = 3, top= 5,barfill = "dodgerblue3") 
-p4 <- fviz_cos2(pca_result, choice = "var", axes = 4, top= 5,barfill = "dodgerblue3")
+p1 <- fviz_cos2(pca_result_boston, choice = "var", axes = 1, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 1")
+p2 <- fviz_cos2(pca_result_boston, choice = "var", axes = 2, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 2")
+p3 <- fviz_cos2(pca_result_boston, choice = "var", axes = 3, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 3")
+p4 <- fviz_cos2(pca_result_boston, choice = "var", axes = 4, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 4")
 
 grid.arrange(p1, p2, p3, p4, ncol=2)
-
-```
-```{r}
-pca_result$rotation[,1:4]
 ```
 
 ```{r}
-fviz_pca_biplot(pca_result,
-                geom_ind = "point", # para las observaciones
-                geom_var = c("arrow", "text"), # para las variables
-                col.ind = "cos2", # Colorear los puntos por su calidad de representación
-                gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), # Colores para los puntos
-                repel = F # Evitar la superposición de texto
+data.frame(pca_result_boston$rotation[,1:4])
+```
+
+```{r}
+fviz_pca_biplot(pca_result_boston,
+                geom.ind = "point", 
+                geom_var = c("arrow", "text"), 
+                col.var = "cos2",
+                col.ind = "cos2",
+                gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                repel = F, 
                 )
 ```
-Un valor alto de cos2 para una variable en una componente principal indica que la componente explica una gran parte de la varianza de esa variable. En otras palabras, la variable está bien representada en esa dimensión. Esto significa que la dirección y magnitud de la variable tienen una fuerte correlación con la componente principal.
+
+Vemos que la componente principal 1 aglomera el 51% de la varianza con valores altos de cos2. Un valor alto de cos2 para una variable en una componente principal indica que la componente explica una gran parte de la varianza de esa variable. En otras palabras, la variable está bien representada en esa dimensión. Esto significa que la dirección y magnitud de la variable tienen una fuerte correlación con la componente principal. Vemos que la variable del número de habitaciones (rm) tiene un cos2 bajo pero como vimos en la gráfica de barras anteriores, es porque viene definida por la componente principal 3.
 
 Similarmente, para los individuos, un alto cos2 en una componente principal sugiere que la posición del individuo en el espacio de las componentes principales está fuertemente determinada por esa componente. Esto puede interpretarse como que el individuo tiene características que son bien capturadas o explicadas por esa componente principal.
 
-
-
-
 ## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
 
-El problema que hemos identificado es un modelo de regresión. Podriamos utilizar el modelo k vecinos más cercanos para el modelo de regresion.
+Dada la naturaleza de los datos de Bostonhousing, considero que se debe utilizar un algoritmo de regresión para predecir la variable medv con respecto a las demás variables. Debido al tamaño de los datos los mejores algoritmos para esta práctica es algoritmo de k-vecinos más cercanos (KNN).
 
+KNN es un algoritmo no paramétrico y puede capturar relaciones no lineales entre las variables sin una formulación específica de un modelo. KNN puede ser útil para identificar patrones locales y no lineales que la regresión lineal podría pasar por alto, especialmente en áreas donde las propiedades tienen características distintivas que solo se aplican a un vecindario específico.
+
+El algoritmo KNN es intuitivo y fácil de entender ya que predice el valor de una nueva observación promediando los valores de los K vecinos más cercanos. KNN tiene en cuenta la localidad de los datos, lo que podría ser particularmente relevante para datos inmobiliarios donde la ubicación y el vecindario juegan un papel crucial en el precio de las viviendas.
 
 
 ## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
 
-```{r}
-plots <- list()
-for (i in 1:13) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i], y = names(BostonHousing)[14])) +
-  geom_point() +
-  stat_smooth(method = "lm", se = TRUE, col = "blue") +
-    labs(title = names(BostonHousing)[i],
-         x = names(BostonHousing)[i], y = names(BostonHousing)[14]) +
-    geom_point() +
-    xlab(names(BostonHousing)[i]) +
-    ylab("medv")
+Es importante prestar atención al preprocesamiento de los datos al utilizar KNN. Dado que KNN depende de la distancia entre las observaciones, las variables deben ser normalizadas o estandarizadas para que tengan la misma escala. De lo contrario, las variables con rangos más grandes podrían influir desproporcionadamente en la predicción.
 
-  plots[[colnames(BostonHousing)[i]]] <- p
-}
-
-grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox,   ncol=2)
-grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
-grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
-```
+También debemos pasar la variable categórica chas a numérica mediante codificación Dummy. En este caso, como solamente hay dos niveles, sería solamente pasar la variable a numerica entre 0 y 1 sin añadir columnas adicionales.
 
 ```{r}
-b2 <- log(BostonHousing[,1])
-b2 <- as.data.frame(cbind(b2, BostonHousing[,14]))
+BostonHousing.scaled <- data.frame(scale(BostonHousing[,-4]))
+BostonHousing.scaled <- cbind(BostonHousing.scaled, chas = BostonHousing$chas)
+BostonHousing.scaled$chas <- as.numeric(BostonHousing.scaled$chas) - 1
 
-ggplot(b2, aes_string(x = names(b2)[1], y = names(b2)[2])) +
-  geom_point() +
-  stat_smooth(method = "lm", se = TRUE, col = "blue") +
-    labs(title = names(b2)[1],
-         x = names(b2)[1], y = names(b2)[2]) +
-    geom_point() +
-    xlab(names(b2)[1]) +
-    ylab("medv")
+datos_long_boston <- pivot_longer(BostonHousing.scaled, cols = -chas, names_to = "Variable", values_to = "Valor")
+
+ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
+  geom_boxplot() +
+  geom_jitter(color = "black", size = 0.4, alpha = 0.6) +
+  scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14, hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  
+    axis.text.y = element_text(size = 8),  
+    axis.title = element_text(size = 10),  
+    axis.title.x = element_text(margin = margin(t = 10), hjust = 0.5),  
+    axis.title.y = element_text(margin = margin(r = 10), hjust = 0.5)  
+  ) +
+  ggtitle("Variables") +
+  xlab("Variables") +
+  ylab("Count")
+
 ```
-
-
 
 ## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+
+En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de BostonHousing escalados para entrenar el algoritmo de KNN. 
 
 ```{r}
 set.seed(1234)
 
-boston.TrainIdx.80<- createDataPartition(BostonHousing$medv,
+boston.TrainIdx.80<- createDataPartition(BostonHousing.scaled$medv,
                                        p=0.8, #Genera un 80% para train, 20% para test
-                                       list = FALSE, #Dame los resultados en una matriz
+                                       list = FALSE, # resultados en una matriz
                                        times = 1) #Genera solamente una partición 80/20
 
-trainSet.boston <- BostonHousing[boston.TrainIdx.80, ]
-testSet.boston <- BostonHousing[-boston.TrainIdx.80, ]
+trainSet.boston <- BostonHousing.scaled[boston.TrainIdx.80, ]
+testSet.boston <- BostonHousing.scaled[-boston.TrainIdx.80, ]
 ```
+
+La función kknn es parte del paquete kknn, que está integrado con caret. Algunos de los hiperparámetros que se pueden ajustar al utilizar la función kknn a través de caret incluyen:
+
+1. kmax: El número de vecinos más cercanos a considerar en la votación o el promedio. Es el hiperparámetro principal del KNN. Un k pequeño puede hacer que el modelo sea sensible al ruido de los datos (sobreajuste), mientras que un k grande puede hacer que el modelo sea demasiado general (subajuste).
+
+2. distance: Define la métrica de distancia a utilizar para calcular la cercanía entre puntos. Por ejemplo, una distancia de 2 se refiere a la distancia euclidiana, mientras que 1 se refiere a la distancia de Manhattan. Distancias fraccionarias también son posibles y pueden ser útiles para capturar estructuras no lineales.
+
+3. kernel: Especifica la función de ponderación a aplicar a los vecinos. Algunas opciones incluyen "rectangular" (todos los vecinos ponderan igual), "triangular", "epanechnikov", "biweight", "triweight", "cos", entre otros. La ponderación puede afectar cómo influyen los vecinos en la predicción final, dando más peso a los vecinos más cercanos.
+
+Es importante destacar que el ajuste de hiperparámetros debe hacerse cuidadosamente. Por ejemplo, seleccionar k puede requerir la implementación de técnicas como la validación cruzada para encontrar un valor que equilibre bien el sesgo y la varianza. La elección de la métrica de distancia y la función de kernel debe basarse en el conocimiento del problema y el dominio de aplicación, así como en la experimentación y validación.
 
 ```{r}
 modelLookup(("kknn"))
 ```
 
-https://www.rdocumentation.org/packages/kknn/versions/1.3.1/topics/kknn
+Debido a que el numero de muestras que tenemos no es muy grande, he decidido optar por un entrenamiento de validación cruzada repetitiva con 3 repeticiones y 10 particiones.
 
 ```{r}
 set.seed(1234)
@@ -461,10 +481,15 @@ kknnControl.boston <- trainControl(method = "repeatedcv",
                            returnResamp = "final")
 ```
 
+En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 21 posibilidades combinatorias:
+- kmax: 5, 7, 9 , 11
+- distance: 1, 2, 3
+- kernel: rectangular, triangular, optimal
+
 ```{r}
 set.seed(1234)
 y = trainSet.boston$medv
-x = trainSet.boston[,-14]
+x = trainSet.boston[,-13]
 
 mygrid.boston = expand.grid(kmax = seq(from=5,to=11,2),
                      distance = seq(1, 3, 1),
@@ -477,19 +502,24 @@ myfit.boston.cv10.rp3 <- train(y=y, x = x,
                method = "kknn",
                metric = "Rsquared",
                trControl = kknnControl.boston,
-               tuneGrid=mygrid.boston,
- #              preProcess = c("center", "scale")
+               tuneGrid=mygrid.boston
                )
-myfit.boston.cv10.rp3$results
+#myfit.boston.cv10.rp3$results
 (myfit.boston.cv10.rp3.best <- subset(myfit.boston.cv10.rp3$results, kmax == myfit.boston.cv10.rp3$bestTune$kmax & distance == myfit.boston.cv10.rp3$bestTune$distance & kernel == myfit.boston.cv10.rp3$bestTune$kernel))
 plot(myfit.boston.cv10.rp3)
 
 ```
+En este primer modelo vemos que los mejores hiperparámetros son con una kmax de 5, distancia Manhattan de 1 y el kernel optimal. La RMSE y Rsquared dan valores muy buenos para este modelo.
+
+Vamos a probar con otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
+- kmax: 5, 7, 9 , 11
+- distance: 11
+- kernel: optimal, epanechnikov, biweight, triweight, cos, gaussian, rank
 
 ```{r}
 set.seed(1234)
 y = trainSet.boston$medv
-x = trainSet.boston[,-14]
+x = trainSet.boston[,-13]
 
 mygrid.boston = expand.grid(kmax = seq(from=5,to=11,3),
                      distance = 1,
@@ -499,7 +529,7 @@ mygrid.boston = expand.grid(kmax = seq(from=5,to=11,3),
                                  ,"cos", "gaussian","rank"
                                 ))
 
-myfit.boston.cv10.pr3.2 <- train(y=y, x = x, 
+myfit.boston.cv10.rp3.2 <- train(y=y, x = x, 
                method = "kknn",
                metric = "Rsquared",
                trControl = kknnControl.boston,
@@ -507,53 +537,106 @@ myfit.boston.cv10.pr3.2 <- train(y=y, x = x,
                #preProcess = c("center", "scale")
                )
 
-myfit.boston.cv10.pr3.2$results
-(myfit.boston.cv10.pr3.2.best <- subset(myfit.boston.cv10.pr3.2$results, kmax == myfit.boston.cv10.pr3.2$bestTune$kmax & distance == myfit.boston.cv10.pr3.2$bestTune$distance & kernel == myfit.boston.cv10.pr3.2$bestTune$kernel))
-plot(myfit.boston.cv10.pr3.2)
+#myfit.boston.cv10.rp3.2$results
+(myfit.boston.cv10.rp3.2best <- subset(myfit.boston.cv10.rp3.2$results, kmax == myfit.boston.cv10.rp3.2$bestTune$kmax & distance == myfit.boston.cv10.rp3.2$bestTune$distance & kernel == myfit.boston.cv10.rp3.2$bestTune$kernel))
+plot(myfit.boston.cv10.rp3.2)
 ```
+El mejor modelo posible lo seguimos encontrando con los hiperparámetros anteriores, por lo que no mejoramos el modelo. Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro modelo de entrenamiento nos da como resultado unas Rsquared de entorno 0.85 y un RMSE de 0.39 sin grandes cambios.
 
 ```{r}
-ggplot(data = myfit.boston.cv10.pr3.2$resample, aes(x = Rsquared, y =  Resample)) +
-  geom_line() +
-  geom_point() +
+resample <- myfit.boston.cv10.rp3.2$resample
+p1 <- ggplot(data = resample, aes(x = RMSE)) +
+  geom_density(size = 2,color = "#8B1A1A") +
   theme_minimal() +
-  labs(title = "kknn",
-       x = "Fold number",
-       y = "Rsquared")
+  labs(title = "RMSE",
+       x = "RMSE")+
+  geom_vline(xintercept = median(resample$RMSE),
+             linetype = "dashed") +
+  annotate("text", x = 0.5, y = 4, 
+           label = paste("RMSE", "\n", round(median(resample$RMSE), 2)), color = "#8B1A1A", size = 4) 
+  
+p2 <- ggplot(data = resample, aes(x = Rsquared)) +
+  geom_density(size = 2, color = "#f1e6b2") +
+  theme_minimal() +
+  labs(title = "Rsquared",
+       x = "Rsquared")+
+  geom_vline(xintercept = median(resample$Rsquared),
+             linetype = "dashed") +
+   annotate("text", x = 0.75, y = 6, 
+           label = paste("Rsquared", "\n", round(median(resample$Rsquared), 2)), color = "#c0b88e", size = 4) 
+
+grid.arrange(p1, p2, ncol = 2)
 ```
 
+En la siguiente tabla vemos las variables más importantes para nuestro modelo situando a lstat y rm como las variables más importantes.
 
 ```{r}
-varImp(myfit.boston.cv10.pr3.2)
+varImp(myfit.boston.cv10.rp3.2)
 ```
 
+Vemos que los valores predecidos caen en lugares parecidos a los valores de train y de test sin que haya ningún outlier aparente.
 
 ```{r}
-preds.boston <- predict(myfit.boston.cv10.pr3.2$finalModel, newdata = testSet.boston)
+preds.boston <- predict(myfit.boston.cv10.rp3.2$finalModel, newdata = testSet.boston)
 
-trainSet.boston$trainORtest <- "train"
-testSet.boston$trainORtest <- "test"
-boston_df_plot.boston <- rbind(trainSet.boston, testSet.boston)
+df.train <- trainSet.boston
+df.test <- testSet.boston
+df.train$trainORtest <- "train"
+df.test$trainORtest <- "test"
+boston_df_plot.boston <- rbind(df.train, df.test)
 
 prediction_test.boston <- cbind(testSet.boston, preds.boston)
 
-
-ggplot(boston_df_plot.boston, aes(x = age, y = medv)) + 
-  geom_point(aes(color = trainORtest)) + 
-  geom_point(data = prediction_test.boston, aes(x = age, y = preds.boston, color = "Predicciones"), show.legend = TRUE) +
-  scale_color_manual(values = c("train" = "#f1e6b2", "test" = "#b2d8b2", "Predicciones" = "black"),
+plots <- list()
+for (i in 1:13){
+  col_name <- names(boston_df_plot.boston)[i]
+  
+  p <- ggplot(boston_df_plot.boston, aes_string(x = col_name, y = "medv")) + 
+    geom_point(aes(color = trainORtest)) + 
+    geom_point(data = prediction_test.boston, aes_string(x = col_name, y = "preds.boston", color = "'Predicciones'"), show.legend = TRUE) +
+    scale_color_manual(values = c("train" = "#f1e6b2", "test" = "#b2d8b2", "Predicciones" = "black"),
                      name = "", labels = c("Predicciones", "Test", "Train")) + 
-  theme_minimal()
+    theme_minimal()
+    
+    plots[[col_name]] <- p
+}
+
+plots$chas <- ggplot(boston_df_plot.boston, aes(y = medv, x = chas, color = trainORtest)) +
+  geom_jitter() +
+  geom_jitter(data = prediction_test.boston, aes(x = chas, y = preds.boston, color = "Predictions"), show.legend = TRUE) +
+    scale_color_manual(values = c("train" = "#f1e6b2", "test" = "#b2d8b2", "Predictions" = "black"),
+                     name = "", labels = c("Predictions", "Test", "Train")) + 
+    theme_minimal()
+
+grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)
+grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
+grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
+plots$chas
+
 ```
 
+El análisis del error de predicción en relación con los valores reales de la variable medv en el conjunto de test revela una tendencia diferenciada en función del rango de precios de las viviendas. Observamos que para las viviendas con un valor cercano a la mediana de medv, las predicciones son notablemente precisas, reflejando un error bajo. No obstante, para las viviendas con un valor de medv superior al promedio, el modelo tiende a tener un rendimiento menos exacto, resultando en errores de predicción más elevados.
+
+```{r}
+testSet.boston %>%
+  cbind(preds.boston) %>%
+  mutate(RMSE = sqrt((preds.boston - medv)^2)) %>%
+  ggplot(aes(x = medv, y = RMSE)) +
+  geom_line(color ="#8B1A1A") + 
+  geom_point(color ="#c0b88e") + 
+  theme_minimal() +
+  labs(title = "Predictive error test data", x = "Medv test data")
+```
+
+Finalmente, para ver si incurrimos en overfitting o underfitting, calculamos el RMSE de los valores predichos con los datos de entrenamiento y con lo datos de test. Observamos que en los datos de entrenamiento el error es menor que en los datos de test pero la diferencia no es muy grande, siendo el error muy bajo. Encontramos un modelo bueno para predecir el precio de la vivienda con estas variables en la ciudad de Boston.
+
 ```{r, warning=FALSE}
-preds.boston.train <- predict(myfit.boston.cv10.rp3$finalModel, newdata = trainSet.boston)
+preds.boston.train <- predict(myfit.boston.cv10.rp3.2$finalModel, newdata = trainSet.boston)
 
 cat("El error RMSE de los datos de entrenamiento es",sqrt((1/nrow(trainSet.boston)) * sum((trainSet.boston$medv - preds.boston.train)^2)),"\n")
 
-cat("El error RMSE error de los datos de evaluación es", sqrt((1/nrow(testSet.boston)) * sum((testSet.boston$medv - preds.boston)^2)),"\n")
+cat("El error RMSE de los datos de evaluación es", sqrt((1/nrow(testSet.boston)) * sum((testSet.boston$medv - preds.boston)^2)),"\n")
 ```
-
 
 
 # LetterRecognition
@@ -565,16 +648,15 @@ library(mlbench)
 data(LetterRecognition)
 ```
 
-
 ## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
 
 ```{r}
 glimpse(LetterRecognition)
 ```
+
 El dataset contiene 20.000 filas y 17 variables.
 
 Todas las variables son de tipo numérico excepto la variable lettr que es la variable dependiente.
-
 
 ## Pregunta 2. Explica qué representan los ejemplos
 
@@ -582,17 +664,13 @@ Los datos de LetterRecognition del paquete mlbench en R están diseñados para l
 
 El dataset contiene 20,000 observaciones con 17 variables. La primera variable es categórica y tiene niveles de la A a la Z, representando cada una de las letras del alfabeto. Las 16 variables restantes son numéricas y representan diversas características estadísticas y geométricas de las imágenes de las letras.
 
-
-
 ## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
 
 El dataset es un problema de clasificación. Su objetivo es identificar una de las 26 letras mayúsculas del alfabeto inglés a partir de características numéricas extraídas de imágenes de letras. Dado que la variable dependiente (lettr) es categórica con 26 categorías únicas, claramente se trata de un problema de clasificación. Para la distribución de los ejemplos de cada clase, en un conjunto de datos ideal para clasificación, esperarías tener una distribución relativamente equilibrada de ejemplos en cada clase para evitar sesgos en el modelo hacia clases más frecuentes.
 
-
 ```{r}
 table(LetterRecognition$lettr)
 ```
-
 
 ```{r}
 LetterRecognition %>%
@@ -607,10 +685,7 @@ LetterRecognition %>%
   guides(fill = FALSE) 
 ```
 
-
-
 ## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
-
 
 Para contrastar si nuestros datos son adecuados para hacer el analisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
 
@@ -620,7 +695,6 @@ En ambos tests rechazamos la hipotesis nula por lo que nuestros datos son adecua
 bart_spher(LetterRecognition[,-1])
 KMOS(LetterRecognition[,-1])
 ```
-
 
 Primero vamos a ver si escalamos los datos
 
@@ -645,8 +719,6 @@ ggplot(datos_long_letter, aes(x = Variable, y = Valor, fill = Variable)) +
   xlab("VARIABLES") +
   ylab("VALOR")
 ```
-
-
 
 ```{r}
 pca_result.letter <- prcomp(LetterRecognition[,-1])
@@ -675,8 +747,6 @@ ggplot(df_var_exp[1:15,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[1:15,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-
-
 ```{r}
 sesgos.letter <- cor(pca_result.letter$x[,1:7], LetterRecognition[,-1])
 
@@ -689,10 +759,6 @@ pheatmap(sesgos.letter,
          scale = "none", 
          annotation_legend = TRUE)
 ```
-
-
-
-
 
 ```{r, warning=FALSE}
 pca.letter <- as.data.frame(pca_result.letter$x[,1:7], stringsAsFactors=F)
@@ -720,6 +786,7 @@ grid.arrange(plots$y2bar, plots$xybar, plots$x2ybr, plots$xy2br, ncol = 2)
 plots$x.ege
 plots$lettr
 ```
+
 ```{r}
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
@@ -735,8 +802,6 @@ data_matrix <- LetterRecognition[,-1]
 data_matrix_unique <- unique(data_matrix)
 tsne_results <- Rtsne(data_matrix, dims = 2, perplexity = 30)
 ```
-
-
 
 ```{r}
 # Obtener todas las clases únicas de la variable lettr
@@ -764,8 +829,6 @@ grid.arrange( plots$U,plots$V,plots$W,plots$X, plots$Z, ncol = 3)
 
 ```
 
-
-
 ```{r}
 p12 <- fviz_pca_var(pca_result.letter, col.var="cos2",
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
@@ -785,6 +848,7 @@ grid.arrange(p12, p34, ncol= 2)
 p56
 
 ```
+
 ```{r}
 p1 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 1, top= 5, barfill = "dodgerblue3") 
 p2 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 2, top= 5, barfill = "dodgerblue3") 
@@ -808,25 +872,14 @@ factoextra::fviz_pca_biplot(pca_result.letter,
                 repel = F # Evitar la superposición de texto
                 )
 ```
+
 Un valor alto de cos2 para una variable en una componente principal indica que la componente explica una gran parte de la varianza de esa variable. En otras palabras, la variable está bien representada en esa dimensión. Esto significa que la dirección y magnitud de la variable tienen una fuerte correlación con la componente principal.
 
 Similarmente, para los individuos, un alto cos2 en una componente principal sugiere que la posición del individuo en el espacio de las componentes principales está fuertemente determinada por esa componente. Esto puede interpretarse como que el individuo tiene características que son bien capturadas o explicadas por esa componente principal.
 
-
-
-
 ## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
 
-
-
-
-
 ## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
-
-
-
-
-
 
 ## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
 
@@ -840,8 +893,6 @@ letterRecognition.TrainIdx.80<- createDataPartition(LetterRecognition$lettr,
 trainSet.letter <- LetterRecognition[letterRecognition.TrainIdx.80, ]
 testSet.letter <- LetterRecognition[-letterRecognition.TrainIdx.80, ]
 ```
-
-
 
 ```{r}
 modelLookup(("kknn"))
@@ -880,6 +931,7 @@ myfit.letter.cv10$results
 plot(myfit.letter.cv10)
 
 ```
+
 ```{r}
 mygrid.letter <- expand.grid(kmax = seq(9,13,2),
                       distance = 1,
@@ -921,7 +973,6 @@ myfit.letter.cv10.3$results
 plot(myfit.letter.cv10.3)
 ```
 
-
 ```{r}
 ggplot(data = myfit.letter.cv10.3$resample, aes(x = Resample, y = Kappa)) +
   geom_line() +
@@ -933,17 +984,9 @@ ggplot(data = myfit.letter.cv10.3$resample, aes(x = Resample, y = Kappa)) +
   geom_point(data = myfit.letter.cv10.3$resample, aes(x = Resample, y = Accuracy), color= "red")
 ```
 
-
-
-
-
-
 ```{r}
 varImp(myfit.letter.cv10.3)
 ```
-
-
-
 
 ```{r}
 preds.letter <- predict(myfit.letter.cv10.3$finalModel, newdata = testSet.letter)
@@ -995,7 +1038,6 @@ ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq))
 
 ```
 
-
 ```{r}
 # Evaluar el rendimiento en el conjunto de entrenamiento
 trainPredictions <- predict(myfit.letter.cv10.3$finalModel, trainSet.letter)
@@ -1008,8 +1050,6 @@ conf_test <- confusionMatrix(testPredictions, testSet.letter$lettr)
 conf_train$overall
 conf_test$overall
 ```
-
-
 
 ```{r}
 modelLookup(("naive_bayes"))
@@ -1050,7 +1090,6 @@ Los datos de este dataset se localizan en el paquete R mlbench.
 diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
 ```
 
-
 ## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
 
 ```{r}
@@ -1058,19 +1097,9 @@ glimpse(diabetesBRFSS2015)
 diabetesBRFSS2015.info()
 ```
 
-
-
-
-
-
-
-
 ## Pregunta 2. Explica qué representan los ejemplos
 
-https://archive.ics.uci.edu/dataset/891/cdc+diabetes+health+indicators
-
-
-
+<https://archive.ics.uci.edu/dataset/891/cdc+diabetes+health+indicators>
 
 ```{r}
 diabetesBRFSS2015[] <- lapply(diabetesBRFSS2015, as.factor)
@@ -1082,9 +1111,6 @@ diabetesBRFSS2015$Diabetes_binary <- factor(diabetesBRFSS2015$Diabetes_binary, l
 Hmisc::describe(diabetesBRFSS2015)
 glimpse(diabetesBRFSS2015)
 ```
-
-
-
 
 ## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
 
@@ -1106,7 +1132,6 @@ diabetesBRFSS2015 %>%
 
 
 ```
-
 
 ```{r}
 # Incluye Diabetes_binary en el pivot_longer, si es necesario
@@ -1185,7 +1210,6 @@ for(variable in unique(data_long$Variable)) {
 grid.arrange(plots$GenHlth, plots$Age, plots$Education, plots$Income, ncol=2)
 ```
 
-
 ```{r}
 p1 <- ggplot(data=diabetesBRFSS2015, aes(x=BMI, group=Diabetes_binary, fill=Diabetes_binary)) +
     geom_density(adjust=1.5, alpha=.4) +
@@ -1235,8 +1259,6 @@ p2 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill
 grid.arrange(p1, p2, ncol = 2)
 ```
 
-
-
 ## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
 
 ```{r}
@@ -1268,22 +1290,13 @@ ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
 
 ```
 
-
-
 ## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
 
-
-
-
-
 ## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
-
 
 ```{r}
 ONE HOT CODING
 ```
-
-
 
 ## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
 
@@ -1297,8 +1310,6 @@ diabetes.TrainIdx.80 <- createDataPartition(diabetesBRFSS2015$Diabetes_binary,
 trainSet.diabetes <- diabetesBRFSS2015[diabetes.TrainIdx.80, ]
 testSet.diabetes <- diabetesBRFSS2015[-diabetes.TrainIdx.80, ]
 ```
-
-
 
 ```{r}
 modelLookup(("naive_bayes"))
@@ -1345,8 +1356,6 @@ ggplot(data = myfit.diabetes.cv10.nb$resample, aes(x = Resample, y = Accuracy)) 
        y = "Accuracy")
 ```
 
-
-
 ```{r}
 set.seed(1234)
 y = trainSet.letter$lettr
@@ -1368,14 +1377,9 @@ plot(myfit.letter.cv10.2)
 
 ```
 
-
-
-
-
 ```{r}
 varImp(myfit.diabetes.cv10.nb)
 ```
-
 
 ```{r}
 preds.diabetes <- predict(myfit.diabetes.cv10.nb$finalModel, newdata = testSet.diabetes)
@@ -1427,7 +1431,6 @@ ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq))
 
 ```
 
-
 ```{r}
 # Evaluar el rendimiento en el conjunto de entrenamiento
 trainPredictions <- predict(myfit.letter.cv10.2$finalModel, trainSet.letter)
@@ -1438,8 +1441,8 @@ testPredictions <- predict(myfit.letter.cv10.2$finalModel, testSet.letter)
 confusionMatrix(testPredictions, testSet.letter$lettr)
 ```
 
+------------------------------------------------------------------------
 
------
 ```{r}
 set.seed(1234)
 kknnControl.diabetes <- trainControl(method = "cv",
@@ -1473,11 +1476,3 @@ myfit.diabetes.cv10.kknn$results
 plot(myfit.diabetes.cv10.kknn)
 
 ```
-
-
-
-
-
-
-
-
