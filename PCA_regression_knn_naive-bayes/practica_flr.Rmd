@@ -36,6 +36,7 @@ library(REdaS) # Para test esfericidad de Bartlett
 library(factoextra) #Gráficas PCA
 library(REdaS) # Análisis PCA
 library(plotly) # Gráficas PCA 3D
+library(fastDummies) # codificación variables dummy
 
 library(doParallel)
 num_cores <- detectCores()
@@ -87,7 +88,7 @@ Las variables del dataset son:
 9.  rad: Índice de accesibilidad a autopistas radiales.
 10. tax: Tasa de impuesto a la propiedad de valor total por \$10,000.
 11. ptratio: Ratio alumno-profesor por ciudad.
-12. black: 1000(Bk - 0.63)\^2 donde Bk es la proporción de personas negras por ciudad.
+12. black: 1000(Bk - 0.63)/^2 donde Bk es la proporción de personas negras por ciudad.
 13. lstat: Porcentaje de población de estatus bajo.
 14. medv: Valor mediano de las casas ocupadas por sus propietarios en miles de dólares.
 
@@ -146,7 +147,7 @@ plots$chas
 
 ## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
 
-En regresión, la variable dependiente o variable objetivo es continua, lo que significa que puede tomar cualquier valor dentro de un rango. En el caso de "BostonHousing", la variable medv es un claro ejemplo de una variable continua, ya que el valor de las viviendas puede variar en un amplio espectro, teóricamente sin límites específicos dentro de los rangos observados en los datos.
+En regresión, la variable dependiente o variable objetivo es continua, lo que significa que puede tomar cualquier valor dentro de un rango. En el caso de BostonHousing, la variable medv es un claro ejemplo de una variable continua, ya que el valor de las viviendas puede variar en un amplio espectro, teóricamente sin límites específicos dentro de los rangos observados en los datos.
 
 El objetivo principal de un problema de regresión es predecir valores específicos de la variable dependiente basándose en una o más variables independientes (predictores). En este contexto, estamos interesados en predecir el valor de las viviendas (medv) a partir de otras características del dataset, como la tasa de criminalidad (crim), el número promedio de habitaciones por vivienda (rm), etc.
 
@@ -311,6 +312,8 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
 
 Las cinco componentes principales primeras explican el 85% de la varianza total, lo que nos permite avanzar con este conjunto de datos para investigar la presencia de sesgos mediante un mapa de calor que visualiza las correlaciones. Es notable que la primera componente principal por sí sola aclare más del 50% de la varianza, destacando su significativa contribución a la comprensión de la estructura de los datos.
 
+En el siguiente heatmap vemos la correlación de las componentes principales con las variables.
+
 ```{r}
 sesgos <- cor(pca_result_boston$x[,1:5], BostonHousing[,c(-4,-14)])
 
@@ -322,7 +325,7 @@ pheatmap(sesgos,
          breaks = seq(-1, 1, length.out = 256),
          scale = "none", 
          annotation_legend = TRUE,
-         angle_col = 45)
+         angle_col = 45, cutree_cols = 2)
 ```
 
 Observamos que la componente principal 1 desempeña un papel fundamental en la diferenciación de los clusters, destacándose como el principal factor de separación. Curiosamente, las variables que presentan una menor correlación con la Componente Principal 1 (b, rm, zn, dis) coinciden con aquellas que muestran una mayor correlación con la variable medv, y viceversa, en el apartado de la pregunta 3 de este documento. Este patrón sugiere que dichas variables son especialmente adecuadas para inferir el precio medio de la vivienda, lo que indica su relevancia y utilidad en el análisis de los factores que determinan el valor medio de las casas en Boston.
@@ -384,9 +387,13 @@ p4 <- fviz_cos2(pca_result_boston, choice = "var", axes = 4, top= 5, fill = "#00
 grid.arrange(p1, p2, p3, p4, ncol=2)
 ```
 
+Observamos que la primera y segunda componentes principales tiene varias variables que explican su varianza. Conforme vamos profundizando, la varianza se va explicando por algunas variables específicas.
+
 ```{r}
 data.frame(pca_result_boston$rotation[,1:4])
 ```
+
+Examinando los vectores de carga, observamos que la componente 1 parece venir definida por variables relacionadas con el centro urbano. La segunda viene definida por la antigüedad de los edificios. La tercera por el número de habitaciónes por casa, que sabemos que estaba muy relacionada con el precio de las viviendas.
 
 ```{r}
 fviz_pca_biplot(pca_result_boston,
@@ -715,7 +722,7 @@ bart_spher(LetterRecognition[,-1])
 KMOS(LetterRecognition[,-1])
 ```
 
-Vamos a ver la correlación que hay entre las variables predictoras para ver cómo se agrupan. Vemos que hay dos grupos de variables muy correlados entre sí por lo que podriamos pensar que son candidatos a ser importantes en distintas componentes principales.
+Vamos a ver la correlación que hay entre las variables predictoras para ver cómo se agrupan. Vemos que hay 2 grupos de variables muy correlados entre sí por lo que podriamos pensar que son candidatos a ser importantes en distintas componentes principales. Luego hay otro cluster más diverso.
 
 ```{r}
 correlations <- cor(LetterRecognition[,c(-1)])
@@ -728,7 +735,7 @@ pheatmap(correlations,
          breaks = seq(-1, 1, length.out = 256),
          scale = "none", 
          annotation_legend = TRUE,
-         angle_col = 45)
+         angle_col = 45, cutree_cols = 3)
 ```
 
 Para aplicar el PCA de manera correcta, es esencial determinar si nuestros datos requieren un escalado apropiado.
@@ -797,7 +804,8 @@ pheatmap(sesgos.letter,
          cellheight = 20,
          breaks = seq(-1, 1, length.out = 256),
          scale = "none", 
-         annotation_legend = TRUE)
+         annotation_legend = TRUE,
+         cutree_cols = 3)
 ```
 
 Cemos que las variables "x.ege", "y.box", "high", "onpix", "x.box" y "width" tienen una correlacion muy fuerte con la componente principal 1. Curiosamente, son las mismas variables que en el anterior mapa de correlación entre variables tenian una correlación muy fuerte entre ellas.
@@ -832,7 +840,7 @@ grid.arrange(plots$x.ege, plots$xegvy, plots$y.ege, plots$yegvx, ncol = 2)
 plots$lettr
 ```
 
-Como vemos no se ven clusters separables en las dos primeras componentes principales pero sí vemos que cada variable se situa en una zonas específicas, agrupandose entre ellas y con las variables más relacionadas entre ellas. Por ejemplo las variables "x.box", "y.box", "width" y "high" se encuentran en zonas parecidas ya que se correlacionan entre ellas.
+Como vemos no se ven clusters separables en las dos primeras componentes principales pero sí vemos que cada variable se situa en unas zonas específicas, agrupandose entre ellas y con las variables más relacionadas entre ellas. Por ejemplo las variables "x.box", "y.box", "width" y "high" se encuentran en zonas parecidas ya que se correlacionan entre ellas.
 
 Con respecto a la variable dependiente "lettr" vemos que podemos intuir que cada letra se separa de las otras en estas dos primeras componentes principales. En las siguientes ilustraciones muestro mejor la distribución de cada clase entre las dos primeras componentes principales.
 
@@ -887,7 +895,7 @@ grid.arrange(p12, p23, ncol= 2)
 
 ```
 
-Ahora lo muestro numéricamente la importancia de cada variable a cada componente principal. También muestro lo antes descrito mediante gráficas de barras de las 3 componentes principales.
+Ahora lo muestro numéricamente los vectores de carga de cada variable a cada componente principal. También muestro la importancia de varianza explicada en cada componente mediante gráficas de barras de las 3 componentes principales.
 
 ```{r}
 pca_result.letter$rotation[,1:3]
@@ -1032,7 +1040,7 @@ myfit.letter.cv10.3 <- train(y=y, x=x,
                trControl = kknnControl.letter,
                tuneGrid=mygrid.letter
                )
-myfit.letter.cv10.3$results
+
 (myfit.letter.cv10.3.best <- subset(myfit.letter.cv10.3$results, kmax == myfit.letter.cv10.3$bestTune$kmax & distance == myfit.letter.cv10.3$bestTune$distance & kernel == myfit.letter.cv10.3$bestTune$kernel))
 plot(myfit.letter.cv10.3)
 ```
@@ -1063,7 +1071,7 @@ p2 <- ggplot(data = resample, aes(x = Kappa)) +
              linetype = "dashed") +
    annotate("text", x = 0.95, y = 6, 
            label = paste("Kappa", "\n", round(median(resample$Kappa), 3)), color = "#c0b88e", size = 4) +
-  xlim(c(0.93, 0.97))
+  xlim(c(0, 1))
 
 grid.arrange(p1, p2, ncol = 2)
 ```
@@ -1121,6 +1129,8 @@ conf_test <- confusionMatrix(testPredictions, testSet.letter$lettr)
 
 conf_train$overall
 conf_test$overall
+
+
 ```
 
 Al calcular el accuracy de los valores predichos con los datos de entrenamiento y el accuracy de los datos de test, observamos que en los datos de entrenamiento la precisión es mayor que en los datos de test pero la diferencia no es muy grande, siendo el accuracy también muy alto. Encontramos un modelo muy bueno para predecir el tipo de letra según las variables recogidas en este dataset.
@@ -1139,7 +1149,7 @@ diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
 str(diabetesBRFSS2015)
 ```
 
-Es un dataset con 70.692 muestras y 22 variables casi todas numéricas aunque es un problema de la carga de los datos. Paso las variables categoricas a factorizarlas.
+Es un dataset con 70,692 muestras y 22 variables casi todas numéricas aunque es un problema de la carga de los datos. Paso las variables categoricas a factorizarlas.
 
 ```{r}
 diabetesBRFSS2015[] <- lapply(diabetesBRFSS2015, as.factor)
@@ -1151,7 +1161,7 @@ diabetesBRFSS2015$Diabetes_binary <- factor(diabetesBRFSS2015$Diabetes_binary, l
 Hmisc::describe(diabetesBRFSS2015)
 ```
 
-No hay datos nulos en nuestro dataset. Hay algunas variables categóricas bastante balanceadas pero otras no. Parece que hay algunas variables con varias clases e incluso otras que puede ser numéricas.
+No hay datos nulos en nuestro dataset. Hay algunas variables categóricas bastante balanceadas pero otras no. Parece que hay algunas variables con varias clases e incluso otras que pueden ser numéricas.
 
 ## Pregunta 2. Explica qué representan los ejemplos
 
@@ -1160,27 +1170,27 @@ Los datos del dataset de diabetesBRFSS2015 representa información de encuestas 
 El conjunto de datos incluye 22 variables que abarcan desde información demográfica hasta resultados de exámenes de laboratorio y respuestas a preguntas de encuestas. Aquí hay un resumen de algunas de las variables clave:
 
 1. Diabetes_binary: Variable objetivo binaria que indica si el paciente tiene diabetes (incluyendo prediabetes) o no.
-2. HighBP: Presión arterial alta, indicada binariamente.
-3. HighChol: Colesterol alto, también indicado de manera binaria.
-4. CholCheck: Indica si el paciente ha tenido un chequeo de colesterol en los últimos 5 años.
+2. HighBP: Presión arterial alta, indicada binariamente 0 = no 1 = si.
+3. HighChol: Colesterol alto, también indicado de manera binaria 0 = no 1 = si.
+4. CholCheck: Indica si el paciente ha tenido un chequeo de colesterol en los últimos 5 años 0 = no 1 = si.
 5. BMI: Índice de masa corporal, una medida cuantitativa.
-6. Smoker: Indica si el paciente ha fumado al menos 100 cigarrillos en su vida.
-7. Stroke: Indica si al paciente le han diagnosticado un derrame cerebral.
-8. HeartDiseaseorAttack: Presencia de enfermedad coronaria o ataque cardíaco, indicado binariamente.
-9. PhysActivity: Actividad física en los últimos 30 días, excluyendo el trabajo, indicado binariamente.
-10. Fruits: Consumo diario de frutas, indicado binariamente.
-11. Veggies: Consumo diario verduras, indicado binariamente.
-12. HvyAlcoholConsump: Consumo excesivo de alcohol.
-13. AnyHealthcare: Cobertura de salud de cualquier tipo.
-14. NoDocbcCost: Si hubo un momento en los últimos 12 meses en que el paciente necesitaba ver a un doctor pero no pudo debido al costo.
-15. GenHlth: Estado general de salud, medido en una escala de 1 a 5.
+6. Smoker: Indica si el paciente ha fumado al menos 100 cigarrillos en su vida 0 = no 1 = si.
+7. Stroke: Indica si al paciente le han diagnosticado un derrame cerebral 0 = no 1 = si.
+8. HeartDiseaseorAttack: Presencia de enfermedad coronaria o ataque cardíaco, indicado binariamente 0 = no 1 = si.
+9. PhysActivity: Actividad física en los últimos 30 días, excluyendo el trabajo 0 = no 1 = si, indicado binariamente.
+10. Fruits: Consumo diario de frutas, indicado binariamente 0 = no 1 = si.
+11. Veggies: Consumo diario verduras, indicado binariamente 0 = no 1 = si.
+12. HvyAlcoholConsump: Consumo excesivo de alcohol 0 = no 1 = si.
+13. AnyHealthcare: Cobertura de salud de cualquier tipo 0 = no 1 = si.
+14. NoDocbcCost: Si hubo un momento en los últimos 12 meses en que el paciente necesitaba ver a un doctor pero no pudo debido al costo 0 = no 1 = si.
+15. GenHlth: Estado general de salud, medido en una escala de 1 a 5, 1 = excelente 2 = muy buena 3 = buena 4 = poca 5 = muy poca. 
 16. MentHlth:  Salud mental indicada por el número de días en los últimos 30 días que no fueron buenos.
 17. PhysHlth: Salud física indicada por el número de días en los últimos 30 días que no fueron buenos.
-18. DiffWalk: Dificultad para caminar o subir escaleras.
-19. Sex: Género del paciente.
-20. Age: Edad, categorizada en 13 niveles de edad.
-21. Education: Nivel de educación, en una escala de 1 a 6.
-22. Income: Ingresos, categorizados en una escala de 1 a 8.
+18. DiffWalk: Dificultad para caminar o subir escaleras. 0 = no 1 = si.
+19. Sex: Género del paciente. 0 = mujer 1 = hombre
+20. Age: Edad, categorizada en 13 niveles de edad. 1 = 18-24, 9 = 60-64, 13 = 80 o mayores.
+21. Education: Nivel de educación, en una escala de 1 a 6, 1 = Nunca fue a la escuela, 2 = Grados 1 a 8 (Elemental), 3 = Grados 9 a 11 (Algo de instituto) 4 = Grados 12 or graduación (Graduado de instituto) 5 = Universidad de 1 a 3 años (Asistió a la universidad) 6 = Universidad 4 años o más (Graduado universitario).
+22. Income: Ingresos, categorizados en una escala de 1 a 8, 1 = menos de 10,000 USD, 5 = menos de 35,000 USD, 8 = 75,000 USD o mas.
 
 Estas variables ofrecen una visión integral de los factores de riesgo, condiciones de salud y estilos de vida de los participantes, permitiendo realizar análisis detallados sobre la relación entre estos factores y la diabetes.
 
@@ -1234,11 +1244,11 @@ for(variable in unique(data_long$Variable)) {
     theme_minimal() +
     labs(title = variable,
          x = "", y = "Percentage") +
-    theme(legend.position = "none")
+    theme(legend.position = "none") +
+    theme(plot.title = element_text(size = 10), axis.title = element_text(size = 8))
   
   plots[[variable]] <- p
 }
-
 
 grid.arrange(plots$HighBP, plots$HighChol, plots$CholCheck, plots$Smoker, plots$Stroke, plots$HeartDiseaseorAttack, ncol=3)
 
@@ -1248,10 +1258,13 @@ grid.arrange(plots$DiffWalk, plots$Sex, ncol=3)
 
 ```
 
+En estas graficas de barras podemos concluir que casi todas las variables pueden estar muy relacionadas con pacientes con diabetes. Algunas influyen a tener a diabetes como: HighBP, HighChol, CholCheck, Smoker, Stroke, HeartDiseaseorAttack, DiffWalk y Sex (hombre más propenso). Con esto podemos decir que unos tener una mala salud como una presión arterial alta, colestererol o ser fumador influyen en tener diabetes. El ictus y el ataque cardiaco podría estar relacionado con las variables anteriores por lo que son tambien variables susceptibles de ser predictoras de tener diabetes. En el caso de los chequeo del colesterol en los ultimos 5 años aumenta en pacientes diabeticos. Esto es debido que al ser diagnosticados estos pacientes requieren un mayor seguimiento por parte del personal sanitario.
 
+Hay otros casos que las variables influyen en no tener diabetes como: PhysHlth, Fruits, Veggies. Es decir que hacer ejercicio fisico, comer frutas y verduras ayudan a evitar tener diabetes.
 
+Hay tres variables que no varían mucho entre pacientes sanos y diabéticos que son  HvyAlcoholConsump, AnyHealthcare y NoDocbcCost. 
 
-
+Vamos a mirar ahora las variables con varias clases.
 
 ```{r}
 # Incluye Diabetes_binary en el pivot_longer, si es necesario
@@ -1275,11 +1288,12 @@ for(variable in unique(data_long$Variable)) {
   # Crea el gráfico
   p <- ggplot(data_filtered, aes(x = Value, y = Percentage, fill = Diabetes_binary)) +
     geom_col(position = position_dodge(), alpha = 0.7) +
-    scale_fill_viridis_d() +
+    scale_fill_manual(values = c("Healthy" = "#00AFBB", "Diabetic" = "#FC4E07")) +
     theme_minimal() +
     labs(title = variable,
          x = "", y = "Percentage") +
-    theme(legend.position = "none")
+    theme(legend.position = "none") +
+    theme(axis.title = element_text(size = 9))
   
   # Guarda el gráfico en la lista
   plots[[variable]] <- p
@@ -1289,97 +1303,76 @@ for(variable in unique(data_long$Variable)) {
 grid.arrange(plots$GenHlth, plots$Age, plots$Education, plots$Income, ncol=2)
 ```
 
+Aquí ya vemos algunas distribuciones interesantes. En estos gráficos vemos en color azul los pacientes sanos y en rojo los pacientes diabéticos. 
+
+En general las personas sanas se sienten mejor que los pacientes diabéticos ya que el número 1 en la escala es estado excelente. Con respecto a la edad, vemos que la mayoría de personas entrevistadas para este estudio se situan entre los 50 y 72 años (7-11). La diabetes puede clasificarse principalmente en dos tipos: Diabetes de tipo 1  y diabetes de tipo 2, cada una de ellas con diferentes edades típicas de aparición. La diabetes de tipo 1, menos frecuente, suele diagnosticarse en niños, adolescentes o adultos jóvenes, pero puede aparecer a cualquier edad. Por otro lado, la diabetes de tipo 2 es más frecuente en adultos mayores de 45 años, aunque cada vez se diagnostica en personas más jóvenes, incluidos adolescentes y adultos jóvenes, debido al aumento de las tasas de obesidad. Parece lógica esta distribución de los datos ya que el mayor número de muestras se situan en esta franja crítica de aparición de la enfermedad, aunque para saber si la variable edad es un factor de riesgo, se debería tener el mismo número de muestras a cada edad. Considero por tanto que esta variable contiene un sesgo importante para nuestro modelo.
+
+Otro sesgo importante que veo en estos datos, se muestra en las gráficas de distribución de eduacation e income. Vemos que la mayoría de las personas encuestadas para este estudio son personas con alto status socioeconómico ya que tienen altos niveles de estudios y un porcentaje alto de ingresos económicos, sobre todo en la franja de más de 75.000 USD. Al preguntar a este tipo de personas, otras variables se ven muy sesgadas a la hora de optimizar nuestro modelo como por ejemplo: NoDocbcCost (no poder costearse un médico), AnyHealthcare (tenencia de seguro médico) o PhysActivity (actividad física). 
+
+Vamos a estudiar ahora las variables continuas del dataset.
+
 ```{r}
 p1 <- ggplot(data=diabetesBRFSS2015, aes(x=BMI, group=Diabetes_binary, fill=Diabetes_binary)) +
-    geom_density(adjust=1.5, alpha=.4) +
-   scale_fill_viridis_d()+
-  theme_minimal()+ 
-  theme(legend.position = "none")
-
-p2 <- ggplot(data=diabetesBRFSS2015, aes(x=BMI, group=Diabetes_binary, fill=Diabetes_binary)) +
-    geom_density(adjust=1.5, alpha=.4, position = "fill") +
-   scale_fill_viridis_d()+
-  theme_minimal()
-
-grid.arrange(p1, p2, ncol = 2)
-```
-
-```{r}
-p1 <- ggplot(data=diabetesBRFSS2015, aes(x=MentHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
-    geom_density(adjust=1.5, alpha=.4) +
-   scale_fill_viridis_d()+
-  theme_minimal()+ 
-  theme(legend.position = "none")+
-  xlab("days")
+  geom_boxplot(alpha=.4) +
+  scale_fill_viridis_d()+
+  theme_minimal()+
+  theme(legend.position = "none",
+        axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank()) 
 
 p2 <- ggplot(data=diabetesBRFSS2015, aes(x=MentHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
-    geom_density(adjust=1.5, alpha=.4, position = "fill") +
-   scale_fill_viridis_d()+
-  theme_minimal()+
-  xlab("days")
-
-grid.arrange(p1, p2, ncol = 2)
-```
-
-```{r}
-p1 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
-    geom_density(adjust=1.5, alpha=.4) +
+    geom_boxplot(alpha=.4) +
    scale_fill_viridis_d()+
   theme_minimal()+ 
-  theme(legend.position = "none")+
-  xlab("days")
+  xlab("MentHlth (days)") +
+  theme(axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank()) 
 
-p2 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
-    geom_density(adjust=1.5, alpha=.4, position = "fill") +
+p3 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill=Diabetes_binary)) +
+    geom_boxplot(alpha=.4) +
    scale_fill_viridis_d()+
-  theme_minimal()+
-  xlab("days")
+  theme_minimal()+ 
+  xlab("PhysHlth (days)")+
+    theme(legend.position = "none",
+          axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank()) 
 
-grid.arrange(p1, p2, ncol = 2)
+grid.arrange(p1, p2, p3, ncol = 1)
 ```
+
 
 ## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
 
-En este data 
-
-```{r}
-# Convertir todas las columnas a numéricas
-data_numeric <- diabetesBRFSS2015 %>% mutate(across(everything(), as.numeric))
-
-# Calcular correlaciones
-correlations <- cor(data_numeric, use = "complete.obs")
-
-# Extraer correlaciones de Diabetes_binary y crear un dataframe
-cor_df <- data.frame(correlations["Diabetes_binary", ])
-
-# Preparar los datos para graficar
-cor_df$Variable <- rownames(cor_df)
-cor_df <- cor_df %>% filter(Variable != "Diabetes_binary")
-names(cor_df)[1] <- "Correlation"
-cor_df <- cor_df %>% arrange(desc(Correlation))
-
-# Asegúrate de que la variable 'Variable' esté ordenada por 'Correlation' correctamente antes de graficar
-cor_df$Variable <- factor(cor_df$Variable, levels = cor_df$Variable[order(cor_df$Correlation, decreasing = TRUE)])
-
-# Graficar usando el factor ordenado
-ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
-  geom_col() +
-  coord_flip() +
-   labs(title = "Correlaciones con Diabetes_binary", x = "", y = "Correlación", fill = "Diabetes") +
-  scale_fill_viridis_c() 
-  
-
-```
+En el caso de este dataset hay 19 de 22 variables categóricas por lo que no considero que sea buena idea hacer una PCA para estos datos.
 
 ## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
 
+Para el dataset diabetesBRFSS2015, que hemos identificado como adecuado para problemas de clasificación, específicamente para determinar la presencia de diabetes, el algoritmo Naive Bayes puede ser una opción atractiva para empezar el modelado. 
+
+El algoritmo Naive Bayes es un clasificador probabilístico basado en el teorema de Bayes con la "ingenua" suposición de independencia entre las características. Es especialmente popular en tareas de clasificación de texto pero también puede ser efectivo en datasets de salud como este.
+
+Naive Bayes es conocido por ser un modelo simple y rápido para entrenar lo que lo hace atractivo para datasets grandes o para una exploración inicial de los datos. Funciona bien con variables categóricas lo cual es relevante para el dataset diabetesBRFSS2015, que contiene varias de estas variables, aunque también funciona con variables numéricas.
+
+La suposición de independencia entre las características raramente se cumple en la práctica lo que puede afectar la precisión del modelo. Dado que es un modelo probabilístico puede no ser tan preciso en la clasificación cuando las relaciones entre las características son complejas o altamente correlacionadas. 
+
+A menudo considerado como un punto de partida para la clasificación binaria, la regresión logística puede manejar relaciones lineales entre las características y la variable objetivo, pero puede quedarse corta frente a relaciones más complejas que Naive Bayes podría capturar a través de su enfoque probabilístico. 
+
+
 ## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
 
+Aunque el algoritmo Naive Bayes es menos sensible al escalado de características que otros algoritmos, normalizar o estandarizar los datos numéricos puede ser útil para mantener la consistencia en la interpretación de los resultados. 
+
 ```{r}
-ONE HOT CODING
+diabetesBRFSS2015$BMI <- scale(diabetesBRFSS2015$BMI)
+diabetesBRFSS2015$MentHlth <- scale(diabetesBRFSS2015$MentHlth)
+diabetesBRFSS2015$PhysHlth <- scale(diabetesBRFSS2015$PhysHlth)
 ```
 
+
 ## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+
+
+En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de diabetesBRFSS2015 para entrenar el algoritmo de Naive-bayes. Vemos que el porcentaje de paciente sano y diabético en entrenamiento y test se mantienen.
 
 ```{r}
 set.seed(1234)
@@ -1390,11 +1383,24 @@ diabetes.TrainIdx.80 <- createDataPartition(diabetesBRFSS2015$Diabetes_binary,
 
 trainSet.diabetes <- diabetesBRFSS2015[diabetes.TrainIdx.80, ]
 testSet.diabetes <- diabetesBRFSS2015[-diabetes.TrainIdx.80, ]
+
+table(trainSet.diabetes$Diabetes_binary)
+table(testSet.diabetes$Diabetes_binary)
 ```
+
+Dentro del paquete caret encontramos el modelo naive_bayes y los hiperparámetros específicos que se pueden ajustar dependen del tipo de modelo naive_bayes que se está utilizando. Por lo general, naive_bayes es conocido por su simplicidad y tiene relativamente pocos hiperparámetros en comparación con otros modelos de aprendizaje automático más complejos. Sin embargo, hay algunas variaciones del algoritmo que ofrecen diferentes hiperparámetros para el ajuste, especialmente cuando se trata de modelar la distribución de los datos.
+
+- usekernel: Este hiperparámetro determina si se deben usar kernels para estimar la densidad de probabilidad de las variables numéricas. Es útil cuando se asume que la distribución de los datos no sigue necesariamente una distribución normal. Los valores habituales: TRUE o FALSE. El valor predeterminado suele ser FALSE, lo que significa que no se usan kernels y se asume una distribución normal (Gaussiana) para las variables numéricas. Si se establece en TRUE, se usan kernels para una aproximación más flexible de la distribución de los datos.
+
+- laplace: Este hiperparámetro se utiliza cuando usekernel es TRUE. Se refiere al factor de suavizado (factor de Laplace) aplicado a las estimaciones de densidad del kernel para evitar el problema de la probabilidad cero. Los valores habituales son un valor numérico, generalmente pequeño (por ejemplo, 0, 0.01, 0.1). Un valor más grande aumenta el suavizado.
+
+- adjust: También relacionado con el uso de kernels (cuando usekernel es TRUE), este hiperparámetro ajusta el ancho de banda del kernel utilizado en la estimación de la densidad. Los valores habituales son un valor numérico mayor que 0. Un valor de 1 significa no ajustar el ancho de banda, valores menores de 1 lo reducen y valores mayores de 1 lo aumentan. Ajustar el ancho de banda puede ayudar a afinar cómo se modela la distribución de las variables numéricas.
 
 ```{r}
 modelLookup(("naive_bayes"))
 ```
+
+Debido a que computacionalmente naive_bayes no es costoso, he decidido optar por un entrenamiento de validación cruzada repetitiva con 3 repeticiones y 10 particiones. Permito el análisis en paralelo para aumentar el rendimiento.
 
 ```{r}
 set.seed(1234)
@@ -1406,154 +1412,128 @@ NBControl.diabetes <- trainControl(method = "repeatedcv",
                            allowParallel = T)
 ```
 
+En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 68 posibilidades combinatorias:
+- laplace: 0, 0.2, 0.4, 0.6, 0.8, 1
+- usekernel: T, F
+- adjust: 0.2, 0.6, 1, 1.4, 1.8, 2.2
+
 ```{r}
 set.seed(1234)
 y = trainSet.diabetes$Diabetes_binary
 x = trainSet.diabetes[,-1]
 
-mygrid.diabetes <- expand.grid(laplace = seq(1, 10, 2),
-                      usekernel = F,
-                      adjust = seq(1, 10, 2))
+mygrid.diabetes <- expand.grid(laplace = seq(0, 1, 0.2),
+                      usekernel = c(T, F),
+                      adjust = seq(0.2, 2.2, 0.4))
 
-myfit.diabetes.cv10.nb <- train(y=y, x=x, 
+myfit.diabetes.cv10.rp3.nb <- train(Diabetes_binary ~ ., data = trainSet.diabetes, 
                method = "naive_bayes",
                metric = "Accuracy",
                trControl = NBControl.diabetes,
                tuneGrid=mygrid.diabetes
                )
-myfit.diabetes.cv10.nb$results
-(myfit.diabetes.cv10.nb.best <- subset(myfit.diabetes.cv10.nb$results, laplace == myfit.diabetes.cv10.nb$bestTune$laplace & usekernel == myfit.diabetes.cv10.nb$bestTune$usekernel & adjust == myfit.diabetes.cv10.nb$bestTune$adjust))
-plot(myfit.diabetes.cv10.nb)
+
+(myfit.diabetes.cv10.rp3.nb.best <- subset(myfit.diabetes.cv10.rp3.nb$results, laplace == myfit.diabetes.cv10.rp3.nb$bestTune$laplace & usekernel == myfit.diabetes.cv10.rp3.nb$bestTune$usekernel & adjust == myfit.diabetes.cv10.rp3.nb$bestTune$adjust))
+plot(myfit.diabetes.cv10.rp3.nb)
 
 ```
 
+El mejor modelo obtenido es laplace = 0, sin utilizar kernel y adjust= 0.2, aunque no haría falta el parámetro adjust ya que no se utilizará kernel.
+
+Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro mejor modelo de entrenamiento nos da como resultado un accuracy de entorno 0.717 y un Kappa de 0.433. Estos valores son bastante estables en cada una de las iteraciones ya que la distribución de los resultados es muy estable. Los resultados de accuracy, rondan entre 0.7 y 0.73, y los de kappa entre 0.4 y 0.44.
+
 ```{r}
-ggplot(data = myfit.diabetes.cv10.nb$resample, aes(x = Resample, y = Accuracy)) +
-  geom_line() +
-  geom_point() +
+resample <- myfit.diabetes.cv10.rp3.nb$resample
+p1 <- ggplot(data = resample, aes(x = Accuracy)) +
+  geom_density(size = 1.5,color = "#8B1A1A") +
   theme_minimal() +
-  labs(title = "naive_bayes",
-       x = "Fold number",
-       y = "Accuracy")
+  labs(title = "Accuracy",
+       x = "Accuracy")+
+  geom_vline(xintercept = median(resample$Accuracy),
+             linetype = "dashed") +
+  annotate("text", x = 0.72, y = 5, 
+           label = paste("Accuracy", "\n", round(median(resample$Accuracy), 3)), color = "#8B1A1A", size = 4) +
+  xlim(c(0.69, 0.73))
+  
+p2 <- ggplot(data = resample, aes(x = Kappa)) +
+  geom_density(size = 1.5, color = "#f1e6b2") +
+  theme_minimal() +
+  labs(title = "Kappa",
+       x = "Kappa")+
+  geom_vline(xintercept = median(resample$Kappa),
+             linetype = "dashed") +
+   annotate("text", x = 0.435, y = 5, 
+           label = paste("Kappa", "\n", round(median(resample$Kappa), 3)), color = "#c0b88e", size = 4) +
+  xlim(c(0.39, 0.46))
+
+grid.arrange(p1, p2, ncol = 2)
 ```
 
+En la siguiente tabla vemos las variables más importantes para nuestro modelo y vemos que la más importante de todas en considerar tener buena salud, seguida de el indice de masa corporal y la tension vascular alta.
+
 ```{r}
-set.seed(1234)
-y = trainSet.letter$lettr
-x = trainSet.letter[,-1]
-
-mygrid.letter.2 <- expand.grid(kmax = 7,
-                      distance = seq(2,6,2),
-                      kernel = "triangular")
-
-myfit.letter.cv10.2 <- train(y=y, x=x, 
-               method = "kknn",
-               metric = "Kappa",
-               trControl = kknnControl.letter,
-               tuneGrid=mygrid.letter.2
-               )
-myfit.letter.cv10.2$results
-(myfit.letter.cv10.2.best <- subset(myfit.letter.cv10.2$results, kmax == myfit.letter.cv10.2$bestTune$kmax & distance == myfit.letter.cv10.2$bestTune$distance & kernel == myfit.letter.cv10.2$bestTune$kernel))
-plot(myfit.letter.cv10.2)
-
+varImp(myfit.diabetes.cv10.rp3.nb)
 ```
 
-```{r}
-varImp(myfit.diabetes.cv10.nb)
-```
+A continuación, vamos a predecir los resultados de la variable dependiente con el conjunto de test generado anteriormente.
 
-```{r}
-preds.diabetes <- predict(myfit.diabetes.cv10.nb$finalModel, newdata = testSet.diabetes)
+```{r, warning=FALSE}
+preds.diabetes <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, newdata = testSet.diabetes)
 
-conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binary)
+conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binary, positive = "Diabetic")
 conf.diabetes
 ```
 
+
+La matriz muestra que 5748 individuos fueron correctamente identificados como saludables por el modelo (verdaderos positivos). 4090 individuos saludables fueron incorrectamente clasificados como diabéticos (Falsos negativos). 1321 individuos diabéticos fueron incorrectamente clasificados como saludables (falsos positivos). 2979 individuos fueron correctamente identificados como diabéticos (verdaderos negativos).
+
+- Accuracy: El 61.73% de todas las predicciones fueron correctas. Este valor indica la proporción general de predicciones correctas del modelo.
+- Intervalo de Confianza del 95% para la Precisión: Entre 60.92% y 62.53%, lo que proporciona un rango estimado de precisión del modelo en la población general.
+- Tasa de No Información (No Information Rate): Es el mayor de las proporciones de las clases de referencia, que en este caso es 50%. Este valor se utiliza para comparar la precisión del modelo; una precisión significativamente mayor que la tasa de no información indica un modelo útil.
+- P-value de la Precisión Mayor que la Tasa de No Información: Menor que 2.2e-16, lo que sugiere que el modelo es significativamente mejor que una conjetura al azar.
+- Kappa de Cohen: De 0.2345, reflejando una concordancia débil a moderada más allá de la coincidencia por casualidad.
+- Prueba de McNemar Valor-P: Menor que 2.2e-16, lo que indica una diferencia significativa entre los falsos positivos y los falsos negativos.
+
+- Sensibilidad: El 42.14% de los individuos diabéticos reales fueron correctamente identificados, lo que sugiere una capacidad moderadamente baja del modelo para detectar la clase "Diabetic". 
+- Especificidad: El 81.31% de los individuos saludables reales fueron correctamente identificados, indicando una alta capacidad del modelo para detectar la clase "Healthy".
+- Valor Predictivo Positivo :  El 69.28% de los individuos clasificados como diabéticos eran realmente diabéticos.
+- Valor Predictivo Negativo:El 58.43% de los individuos clasificados como saludables eran realmente saludables.
+- Prevalencia de la Clase 'Diabetic': Se asumió un 50%, lo que indica que las clases están balanceadas en el conjunto de datos utilizado para esta matriz de confusión.
+- Tasa de Detección para 'Diabetic'**: El 40.66% del total de individuos fueron correctamente identificados como saludables.
+- Prevalencia de Detección para "Diabetic": El 30% del total de predicciones fueron para la clase 'Diabetic'.
+- Precisión Balanceada: El 61.73%, igual a la precisión general, dado que la prevalencia de las clases es equilibrada.
+
+Aunque el modelo tiene una buena especificidad para detectar individuos saludables, su sensibilidad y valor predictivo negativos son moderados, lo que indica una capacidad limitada para clasificar correctamente a los individuos sanos y para que las predicciones de la clase 'Diabetic' sean precisas. El coeficiente Kappa muestra una concordancia débil, lo que sugiere que hay margen de mejora en la capacidad del modelo para clasificar las instancias más allá de lo que se esperaría por azar. La prueba de McNemar destaca una discrepancia significativa entre los falsos positivos y falsos negativos, lo que puede indicar un sesgo en cómo el modelo realiza sus predicciones. 
+
+A continuación muestro la matriz de confusión gráficamente para una mejor interpretación.
+
 ```{r, warning=FALSE}
-library(ggdendro)
-# Create the summary dataset
-letter.cluster <- LetterRecognition %>% 
-  group_by(lettr) %>% 
-  summarise_each(funs(mean))
 
-# Tranform the summary dataset to a dataframe
-letter.cluster <- as.data.frame(letter.cluster)
+preds.diabetes <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, newdata = testSet.diabetes)
 
-# Assign letters variable as rownames
-rownames(letter.cluster) <- letter.cluster$lettr
-
-# Run the hierarchical clustering 
-clusters <- hclust(dist(letter.cluster))
-
-# Plot the dendogram
-ggdendrogram(clusters, rotate = TRUE, size = 2)+
-  labs(title = "Dendogram of hierarchical clustering model")
-
-pheatmap(t(letter.cluster[,-1]),
-         clustering_method = "ward.D2",
-         color = colorRampPalette(c("#00AFBB", "white", "#FC4E07"))(255), # Paleta de colores
-         cellwidth = 10,
-         cellheight = 10,
-#         breaks = seq(-1, 1, length.out = 256),
-         scale = "none", 
-         annotation_legend = TRUE, angle_col = 0)
+conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binary)
+conf.diabetes_tibble <- as_tibble(conf.diabetes$table)
+plot_confusion_matrix(conf.diabetes_tibble, 
+                      target_col = "Reference", 
+                      prediction_col = "Prediction",
+                      counts_col = "n")
 ```
 
-```{r}
-conf_matrix_long <- as.data.frame(conf.diabetes$table)
+Vamos a ver a continuación sin este modelo ha incurrido en underfitting.
 
-ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "white", high = "#FC4E07", mid ="#00AFBB") +
-  theme_minimal() +
-  labs(x = "Predicted", y = "Reference", fill = "Count") 
-#  geom_text(aes(x=Reference, y = Prediction, label=ifelse(Freq > 0, paste(Reference, Prediction), "")), size = 2)
-
-
-```
-
-```{r}
+```{r, warning=FALSE}
 # Evaluar el rendimiento en el conjunto de entrenamiento
-trainPredictions <- predict(myfit.letter.cv10.2$finalModel, trainSet.letter)
-confusionMatrix(trainPredictions, trainSet.letter$lettr)
+trainPredictions <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, trainSet.diabetes)
+conf_train_diabetes <- confusionMatrix(trainPredictions, trainSet.diabetes$Diabetes_binary)
 
 # Evaluar el rendimiento en el conjunto de prueba
-testPredictions <- predict(myfit.letter.cv10.2$finalModel, testSet.letter)
-confusionMatrix(testPredictions, testSet.letter$lettr)
+testPredictions <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, testSet.diabetes)
+conf_test_diabetes <- confusionMatrix(testPredictions, testSet.diabetes$Diabetes_binary)
+
+conf_train_diabetes$overall
+conf_test_diabetes$overall
 ```
+Al calcular el accuracy de los valores predichos con los datos de entrenamiento y el accuracy de los datos de test, observamos que en los datos de entrenamiento la precisión es ligeramente menor que los datos de test indicando que nuestro modelo ha incurrido en underfitting por lo que deberiamos considerar otro modelo o ver alternativas de preprocesamiento.
 
-------------------------------------------------------------------------
+En resumen, este modelo predice muchos falsos negativos. En casos medicos como este, un falso positivo o falsos negativos pueden incurrir en graves consecuencias.
 
-```{r}
-set.seed(1234)
-kknnControl.diabetes <- trainControl(method = "cv",
-                           number = 10 ,
-                           returnResamp = "final",
-                           seeds = NULL,
-                           allowParallel = T)
-```
-
-```{r}
-set.seed(1234)
-y = trainSet.diabetes$Diabetes_binary
-x = trainSet.diabetes[,-1]
-
-mygrid.diabetes <- expand.grid(kmax = seq(5,9,2),
-                      distance = c(1,2,3),
-                      kernel = c(#"rectangular","triangular",
-                                 "optimal" 
-                                 # ,"epanechnikov", "biweight", "triweight" 
-                                 # ,"cos", "inv", "gaussian","rank"
-                                ))
-
-myfit.diabetes.cv10.kknn <- train(y=y, x=x, 
-               method = "kknn",
-               metric = "Kappa",
-               trControl = kknnControl.diabetes,
-               tuneGrid= mygrid.diabetes
-               )
-myfit.diabetes.cv10.kknn$results
-(myfit.diabetes.cv10.kknn.best <- subset(myfit.diabetes.cv10.kknn$results, kmax == myfit.diabetes.cv10.kknn$bestTune$kmax & distance == myfit.diabetes.cv10.kknn$bestTune$distance & kernel == myfit.diabetes.cv10.kknn$bestTune$kernel))
-plot(myfit.diabetes.cv10.kknn)
-
-```
