@@ -19,7 +19,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Tarea a realizar
 
-En esta práctica se pretenda analizar 3 datasets (BostonHousingData, LetterRecognition, Diabetes en el BRFSS). En cada uno de ellos vamos a responder una serie de preguntas. Se pone en práctica desde la asociación de variables pasando por PCA, el uso de algoritmos básicos como regresión lineal, logística, knn y naive bayes, y preproceso en tres datasets diferentes.
+En esta práctica se pretende analizar 3 datasets (BostonHousingData, LetterRecognition, Diabetes en el BRFSS). En cada uno de ellos vamos a responder una serie de preguntas. Se pone en práctica desde la asociación de variables pasando por PCA, el uso de algoritmos básicos como regresión lineal, logística, knn y naive bayes, y preproceso en tres datasets diferentes.
 
 En primer lugar vamos a responder las preguntas del primer dataset BostonHousingData.
 
@@ -31,14 +31,17 @@ library(gridExtra)
 library(viridis)  # Para la paleta de colores viridis
 library(caret)
 library(kknn)
+library(naivebayes)
 library(pheatmap) # heatmap 
 library(REdaS) # Para test esfericidad de Bartlett
 library(factoextra) #Gráficas PCA
 library(REdaS) # Análisis PCA
 library(plotly) # Gráficas PCA 3D
 library(fastDummies) # codificación variables dummy
+library(cvms) # matriz de confusion
+library(formattable) # tablas
 
-library(doParallel)
+library(doParallel) # para paralelizar procesos
 num_cores <- detectCores()
 registerDoParallel(cores=num_cores)
 ```
@@ -52,7 +55,9 @@ library(mlbench)
 data(BostonHousing)
 ```
 
-## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
+## Pregunta 1. Tamaño y tipo
+
+***¿Qué tamaño tiene? ¿De qué tipo son las variables?***
 
 ```{r}
 str(BostonHousing)
@@ -60,9 +65,9 @@ str(BostonHousing)
 
 El dataset contiene 506 filas y 14 variables.
 
-Todas las variables son de tipo numérico excepto la variable chas o Charles River dummy variable.
+Todas las variables son de tipo numérico excepto la variable "chas" o Charles River dummy variable.
 
-Un primer vistazo a los datos numéricos para ver si tiene nulos, la distribución, búsqueda de variables categóricas, etc
+Un primer vistazo a los datos numéricos para ver si tiene nulos, ver la distribución, buscar de variables categóricas, etc.
 
 ```{r}
 Hmisc::describe(BostonHousing)
@@ -70,27 +75,28 @@ Hmisc::describe(BostonHousing)
 
 No tiene valores nulos y tienen distribuciones dispares entre variables.
 
+## Pregunta 2. Representación ejemplos
 
-## Pregunta 2. Explica qué representan los ejemplos
+***Explica qué representan los ejemplos***
 
-Este dataset incluye información sobre diferentes zonas de Boston, detalladas a través de varios parámetros. Cada registro en este dataset representa una zona de Boston, con características que influyen en la estimación del valor medio de las viviendas en esa zona. La variable dependiente es medv, que se refiere al valor medio de las casas habitadas por sus propietarios en miles de dólares.
+Este dataset incluye información sobre diferentes zonas de Boston, detalladas a través de varios parámetros. Cada registro en este dataset representa una zona de Boston, con características que influyen en la estimación del valor medio de las viviendas en esa zona. La variable dependiente es "medv", que se refiere al valor medio de las casas habitadas por sus propietarios en miles de dólares.
 
 Las variables del dataset son:
 
-1.  crim: Tasa de criminalidad per cápita por ciudad.
-2.  zn: Proporción de terreno residencial zonificado para lotes de más de 25,000 pies cuadrados.
-3.  indus: Proporción de acres de negocio no minorista por ciudad.
-4.  chas: Variable ficticia Charles River (= 1 si el tramo limita con el río; 0 de lo contrario).
-5.  nox: Concentración de óxidos nítricos (partes por 10 millones).
-6.  rm: Número promedio de habitaciones por vivienda.
-7.  age: Proporción de unidades ocupadas por sus propietarios construidas antes de 1940.
-8.  dis: Distancias ponderadas a cinco centros de empleo de Boston.
-9.  rad: Índice de accesibilidad a autopistas radiales.
-10. tax: Tasa de impuesto a la propiedad de valor total por \$10,000.
-11. ptratio: Ratio alumno-profesor por ciudad.
-12. black: 1000(Bk - 0.63)/^2 donde Bk es la proporción de personas negras por ciudad.
-13. lstat: Porcentaje de población de estatus bajo.
-14. medv: Valor mediano de las casas ocupadas por sus propietarios en miles de dólares.
+1.  [crim:]{.underline} Tasa de criminalidad per cápita por ciudad.
+2.  [zn]{.underline}: Proporción de terreno residencial zonificado para lotes de más de 25,000 pies cuadrados.
+3.  [indus]{.underline}: Proporción de acres de negocio no minorista por ciudad.
+4.  [chas]{.underline}: Variable ficticia Charles River (= 1 si el tramo limita con el río; 0 de lo contrario).
+5.  [nox]{.underline}: Concentración de óxidos nítricos (partes por 10 millones).
+6.  [rm]{.underline}: Número promedio de habitaciones por vivienda.
+7.  [age]{.underline}: Proporción de unidades ocupadas por sus propietarios construidas antes de 1940.
+8.  [dis]{.underline}: Distancias ponderadas a cinco centros de empleo de Boston.
+9.  [rad]{.underline}: Índice de accesibilidad a autopistas radiales.
+10. [tax]{.underline}: Tasa de impuesto a la propiedad de valor total por \$10,000.
+11. [ptratio]{.underline}: Ratio alumno-profesor por ciudad.
+12. [b]{.underline}: 1000(Bk - 0.63)/\^2 donde Bk es la proporción de personas negras por ciudad.
+13. [lstat]{.underline}: Porcentaje de población de estatus bajo.
+14. [medv]{.underline}: Valor mediano de las casas ocupadas por sus propietarios en miles de dólares.
 
 Para ver un poco más en detalle los datos vamos a representarlos en gráficas para ver cómo son sus distribuciones o si podemos sacar alguna conclusión previa.
 
@@ -119,41 +125,41 @@ grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
 plots$chas
 ```
 
-1.  Crim: Observamos que la tasa de criminalidad es baja aunque existen zonas en los datos que se llega a tasas muy altas de indice de criminalidad de hasta más de 80, que pueden ser los barrios problemáticos de la ciudad de Boston
+1.  [Crim]{.underline}: Observamos que la tasa de criminalidad es baja aunque existen zonas en los datos que se llega a tasas muy altas de indice de criminalidad de hasta más de 80, que pueden ser los barrios problemáticos de la ciudad de Boston
 
-2.  Zn: Esta gráfica nos quiere decir que no hay muchas zonas residenciales, aunque hay dos picos intermedios sobre 23 y 80 que puede ser barrios residenciales.
+2.  [Zn]{.underline}: Esta gráfica nos quiere decir que no hay muchas zonas residenciales, aunque hay dos picos intermedios sobre 23 y 80 que puede ser barrios residenciales.
 
-3.  Indus: Hay dos zonas de Boston con negocios de minoristas
+3.  [Indus]{.underline}: Hay dos zonas de Boston con negocios de minoristas
 
-4.  Nox: La mayoria de zonas de Boston tienen una densidad de 0.4 y 0.6 ppm de oxido nitrico aunque hay otras menos que llegan hasta 0.9 ppm.
+4.  [Nox]{.underline}: La mayoria de zonas de Boston tienen una densidad de 0.4 y 0.6 ppm de oxido nitrico aunque hay otras menos que llegan hasta 0.9 ppm.
 
-5.  Rm: El número promedio de habitaciones en Boston son de aproximadamente 6 habitaciones por vivienda.
+5.  [Rm]{.underline}: El número promedio de habitaciones en Boston son de aproximadamente 6 habitaciones por vivienda.
 
-6.  Age: Como vemos, la matoria de casas de Boston están construidas antes 1940. La cola a la izquierda nos puede sugerir que se están construyendo casas nuevas en Boston.
+6.  [Age]{.underline}: Como vemos, la matoria de casas de Boston están construidas antes 1940. La cola a la izquierda nos puede sugerir que se están construyendo casas nuevas en Boston.
 
-7.  Dis : Esta gráfica nos indica que la mayoría de zonas se encuentran cerca de centros de empleo indicando que podría ser el centro de la ciudad, aunque la cola de la derecha nos indica que puede que los barrios residenciales se encuentren a las afueras de la ciudad.
+7.  [Dis]{.underline} : Esta gráfica nos indica que la mayoría de zonas se encuentran cerca de centros de empleo indicando que podría ser el centro de la ciudad, aunque la cola de la derecha nos indica que puede que los barrios residenciales se encuentren a las afueras de la ciudad.
 
-8.  Rad: Esta gráfica nos muestra que la mayoría de zonas se encuentran bien comunicadas con autopistas, pero hay una cierta densidad de zonas lejanas a autopistas por lo que podría indicar que son zonas residenciales o marginadas.
+8.  [Rad]{.underline}: Esta gráfica nos muestra que la mayoría de zonas se encuentran bien comunicadas con autopistas, pero hay una cierta densidad de zonas lejanas a autopistas por lo que podría indicar que son zonas residenciales o marginadas.
 
-9.  Tax: Esto nos indica que hay una distribución normal de las tasas excepto unas zonas que pagan más impuestos. Nos sugiere que puede ser una zona residencial de lujo.
+9.  [Tax]{.underline}: Esto nos indica que hay una distribución normal de las tasas excepto unas zonas que pagan más impuestos. Nos sugiere que puede ser una zona residencial de lujo.
 
-10. Ptratio: La mayoría se situa sobre 20 alumnos por profesor. La distribución se ensancha en la cola izquierda porque en colegios privados el ratio suele disminuir.
+10. [Ptratio]{.underline}: La mayoría se situa sobre 20 alumnos por profesor. La distribución se ensancha en la cola izquierda porque en colegios privados el ratio suele disminuir.
 
-11. Black: Esta grádica nos puede sugerir que hay pocas zonas en la que la mayoría de personas son de raza caucásica.
+11. [B]{.underline}: Esta grádica nos puede sugerir que hay pocas zonas en la que la mayoría de personas son de raza caucásica.
 
-12. Lstat: La tasa de personas con estatus bajo ronda el 8% pero la cola de la derecha nos sugiere que hay zonas donde el porcentaje sube por lo que puede ser zonas marginales.
+12. [Lstat]{.underline}: La tasa de personas con estatus bajo ronda el 8% pero la cola de la derecha nos sugiere que hay zonas donde el porcentaje sube por lo que puede ser zonas marginales.
 
-13. Chas: La mayoría de zonas están alejadas del rio Charles
+13. [Chas]{.underline}: La mayoría de zonas están alejadas del rio Charles
 
-## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
+## Pregunta 3. Tipo de problema
 
-En regresión, la variable dependiente o variable objetivo es continua, lo que significa que puede tomar cualquier valor dentro de un rango. En el caso de BostonHousing, la variable medv es un claro ejemplo de una variable continua, ya que el valor de las viviendas puede variar en un amplio espectro, teóricamente sin límites específicos dentro de los rangos observados en los datos.
+***¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?***
+
+En regresión, la variable dependiente o variable objetivo es continua, lo que significa que puede tomar cualquier valor dentro de un rango. En el caso de **BostonHousing**, la variable "medv" es un claro ejemplo de una variable continua, ya que el valor de las viviendas puede variar en un amplio espectro, teóricamente sin límites específicos dentro de los rangos observados en los datos.
 
 El objetivo principal de un problema de regresión es predecir valores específicos de la variable dependiente basándose en una o más variables independientes (predictores). En este contexto, estamos interesados en predecir el valor de las viviendas (medv) a partir de otras características del dataset, como la tasa de criminalidad (crim), el número promedio de habitaciones por vivienda (rm), etc.
 
-Los problemas de regresión buscan modelar la relación entre la variable objetivo y las variables predictoras, que puede ser lineal o no lineal. El análisis y modelado de estas relaciones permiten entender cómo las características de las viviendas y sus alrededores afectan su valor de mercado.
-
-Vemos la distribución de los datos medv para tener una imagén inicial de esta variable.
+Vemos la distribución de los datos "medv" para tener una imagén inicial de esta variable.
 
 ```{r}
 p1 <- ggplot(BostonHousing, aes(x = medv)) +
@@ -172,9 +178,9 @@ p2<- ggplot(BostonHousing, aes(x=medv))+
 grid.arrange(p1, p2, ncol=1)
 ```
 
-La mayoría de casas valen alrededor de 20.000 a 23.000 dolares. Vemos algunos casos interesantes que podemos tener en cuenta que hay varias casas que no siguen una tendencia normal ya que hay un pico de unas observaciones cuyos valores son de 50.000 dolares.
+La mayoría de casas valen alrededor de 20.000 a 23.000 USD. Vemos algunos casos interesantes que podemos tener en cuenta que hay varias casas que no siguen una tendencia normal ya que hay un pico de unas observaciones cuyos valores son de 50.000 USD.
 
-Vamos a ver ahora cómo se correlaciona la variable medv con las variables predictoras
+Vamos a ver ahora cómo se correlaciona la variable "medv" con las variables predictoras
 
 ```{r, warning=FALSE}
 plots <- list()
@@ -210,19 +216,19 @@ plots$chas
 
 Un resumen de lo visto en los gráficos de puntos:
 
-1.  Crim: el precio de los barrios con mayor indice de crimininalidad es menor.
-2.  zn: Se aprecia una ligera relación positiva en esta variable
+1.  [Crim]{.underline}: el precio de los barrios con mayor indice de crimininalidad es menor.
+2.  [zn]{.underline}: Se aprecia una ligera relación positiva en esta variable
 3.  indus: A mayor proporcion de negocios no minorista, el precio de la vivienda cae.
-4.  nox: Se ve una ligera tenendecia a que cuanto mayor es la cantidad de oxido nitrico menor es el precio de las viviendas. Es decir, las zonas más alejadas de la ciudad tendrán un valor mayor en el mercado.
-5.  rm: Se ve una clara correlación positiva entre el número de habitaciones y el precio de la vivienda.
-6.  age: Se intuye que en los barrios más modernos el precio es ligeramente superior al casco antiguo.
-7.  dis: Las zonas más alejadas de la ciudad parece ser que tienen los precios de viviendas más caros
-8.  rad: Parece ser que hay barrios con poca accesibilidad a la autopista y son aquellos con un precio más bajo. Hay algunos barrios donde el precio de la vivienda es muy alto y también tiene poca accesibilidad. Puede ser que sean zonas de residencia de lujo.
-9.  tax: Se ve una ligera correlacion negativa en esta variable.
-10. ptratio: Las zonas con las viviendas más caras tienen un ratio más bajo de alumno-profesorado.
-11. b: No se una relación clara
-12. lstat: Esta relación es bastante clara, ya que las personas con estatus bajo viven en zonas con el precio de la vivienda bajo
-13. chas: La descompesación de las clases no nos deja dar una conclusión aunque parece que las zonas cercanas al rio Charles aumentan el precio de la vivienda
+4.  [nox]{.underline}: Se ve una ligera tenendecia a que cuanto mayor es la cantidad de oxido nitrico menor es el precio de las viviendas. Es decir, las zonas más alejadas de la ciudad tendrán un valor mayor en el mercado.
+5.  [rm]{.underline}: Se ve una clara correlación positiva entre el número de habitaciones y el precio de la vivienda.
+6.  [age]{.underline}: Se intuye que en los barrios más modernos el precio es ligeramente superior al casco antiguo.
+7.  [dis]{.underline}: Las zonas más alejadas de la ciudad parece ser que tienen los precios de viviendas más caros
+8.  [rad]{.underline}: Parece ser que hay barrios con poca accesibilidad a la autopista y son aquellos con un precio más bajo. Hay algunos barrios donde el precio de la vivienda es muy alto y también tiene poca accesibilidad. Puede ser que sean zonas de residencia de lujo.
+9.  [tax]{.underline}: Se ve una ligera correlacion negativa en esta variable.
+10. [ptratio]{.underline}: Las zonas con las viviendas más caras tienen un ratio más bajo de alumno-profesorado.
+11. [b]{.underline}: No se una relación clara
+12. [lstat]{.underline}: Esta relación es bastante clara, ya que las personas con estatus bajo viven en zonas con el precio de la vivienda bajo
+13. [chas]{.underline}: La descompesación de las clases no nos deja dar una conclusión aunque parece que las zonas cercanas al rio Charles aumentan el precio de la vivienda
 
 ```{r}
 correlations <- cor(BostonHousing[,c(-4)])
@@ -243,11 +249,13 @@ ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
   scale_fill_viridis_c() 
 ```
 
-En esta gráfica de correlación vemos que la variable mas correlacionado con la variable medv es aquella variable que mide el numero de personas con estatus bajo (lstat) con una correlación negativa. Luego hay otras como ptratio, indus o tax. La variable con mayor correlación positiva es el número de habitaciones (rm), seguida de la variable con mayor zonas residenciales (zn).
+En esta gráfica de correlación vemos que la variable mas correlacionado con la variable "medv" es aquella variable que mide el numero de personas con estatus bajo (lstat) con una correlación negativa. Luego hay otras como "ptratio", "indus" o "tax". La variable con mayor correlación positiva es el número de habitaciones (rm), seguida de la variable con mayor zonas residenciales (zn).
 
-## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
+## Pregunta 4. Sesgos
 
-El PCA es una técnica estadística que permite reducir la dimensionalidad de los datos, manteniendo al mismo tiempo la mayor cantidad de variación posible. Esto se logra identificando las direcciones (componentes principales) en las cuales los datos varían más. Además de reducir la dimensionalidad, el PCA puede ofrecer insights sobre la estructura subyacente de los datos, incluidos los sesgos potenciales.
+***Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?***
+
+El análisis de componentes principales, PCA, es una técnica estadística que permite reducir la dimensionalidad de los datos, manteniendo al mismo tiempo la mayor cantidad de variación posible. Esto se logra identificando las direcciones (componentes principales) en las cuales los datos varían más. Además de reducir la dimensionalidad, el PCA puede ofrecer insights sobre la estructura subyacente de los datos, incluidos los sesgos potenciales.
 
 Para contrastar si nuestros datos son adecuados para hacer el análisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
 
@@ -265,7 +273,6 @@ datos_long_boston <- pivot_longer(BostonHousing, cols = -chas, names_to = "Varia
 
 ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
   geom_boxplot() +
-  geom_jitter(color = "black", size = 0.4, alpha = 0.6) +
   scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
   theme(
     legend.position = "none",
@@ -306,7 +313,7 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
   geom_line(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
   geom_point(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color = "red") +
   geom_bar(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
-  annotate("text", x = 9, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  annotate("text", x = 9, y = 0.85, label = "Cumulative Scree \n Plot", color = "#8B1A1A", size = 4) +
   geom_text(data = df_cum_var_exp[1:10,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
@@ -325,10 +332,10 @@ pheatmap(sesgos,
          breaks = seq(-1, 1, length.out = 256),
          scale = "none", 
          annotation_legend = TRUE,
-         angle_col = 45, cutree_cols = 2)
+         angle_col = 45, cutree_cols = 3)
 ```
 
-Observamos que la componente principal 1 desempeña un papel fundamental en la diferenciación de los clusters, destacándose como el principal factor de separación. Curiosamente, las variables que presentan una menor correlación con la Componente Principal 1 (b, rm, zn, dis) coinciden con aquellas que muestran una mayor correlación con la variable medv, y viceversa, en el apartado de la pregunta 3 de este documento. Este patrón sugiere que dichas variables son especialmente adecuadas para inferir el precio medio de la vivienda, lo que indica su relevancia y utilidad en el análisis de los factores que determinan el valor medio de las casas en Boston.
+Observamos que la componente principal 1 desempeña un papel fundamental en la diferenciación de los clusters, destacándose como el principal factor de separación. Curiosamente, las variables que presentan una menor correlación con la componente principal 1 (b, rm, zn, dis) coinciden con aquellas que muestran una mayor correlación con la variable medv, y viceversa, en el apartado de la pregunta 3 de este documento. Este patrón sugiere que dichas variables son especialmente adecuadas para inferir el precio medio de la vivienda, lo que indica su relevancia y utilidad en el análisis de los factores que determinan el valor medio de las casas en Boston.
 
 ```{r, warning=FALSE}
 pca <- as.data.frame(pca_result_boston$x[,1:5], stringsAsFactors=F)
@@ -362,7 +369,7 @@ grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
 grid.arrange(plots$chas, plots$medv, ncol=2, nrow=2)
 ```
 
-Como ya veiamos en el heatmap, hay un sesgo claro en nuestros datos ya que nuestros datos del PCA generan dos clusters grandes.Observamos que seis barrios se distancian significativamente del resto, ubicados en la zona inferior derecha del gráfico.
+Como ya veiamos en el heatmap, hay un sesgo claro en nuestros datos ya que nuestros datos del PCA generan dos clusters grandes. Observamos que seis barrios se distancian significativamente del resto, ubicados en la zona inferior derecha del gráfico.
 
 El cluster con forma redondeada, que podría interpretarse como el núcleo urbano de Boston, se caracteriza por su óptima accesibilidad a las autopistas (rad), un régimen tributario más elevado (tax), una concentración superior de edificaciones antiguas (age), niveles más altos de óxidos de nitrógeno (nox), y una mayor densidad de zonas industriales (indus).
 
@@ -387,13 +394,37 @@ p4 <- fviz_cos2(pca_result_boston, choice = "var", axes = 4, top= 5, fill = "#00
 grid.arrange(p1, p2, p3, p4, ncol=2)
 ```
 
-Observamos que la primera y segunda componentes principales tiene varias variables que explican su varianza. Conforme vamos profundizando, la varianza se va explicando por algunas variables específicas.
+El cuadrado del coseno (Cos2) de una variable en una componente principal indica cuánto contribuye esa variable a la varianza explicada por esa componente principal. Para cada componente principal, se presentan las cinco variables con el mayor Cos2 en esa dimensión particular.
+
+Observamos que la primera y segunda componentes principales tiene varias variables que explican su varianza. Aunque la contribución de las variables a la varianza de la componente principal 2 es notable, es menos significativa que las contribuciones de las variables a la componente principal 1, como se puede ver por los valores más bajos de Cos2.
+
+En la componente principal 3, la variable rm tiene un Cos2 mucho más alto que las demás, indicando que es un factor más dominante en esta componente.
+
+En la componente 4 ptratio tiene la contribución más alta, pero todas tienen valores relativamente bajos, lo que sugiere que la componente principal 4 captura menos varianza en las variables originales que las componentes anteriores.
 
 ```{r}
-data.frame(pca_result_boston$rotation[,1:4])
+pca_rotation <- round(data.frame(pca_result_boston$rotation[,1:4]),2)
+pca_rotation <- pca_rotation[order(-pca_rotation[,1]),]
+
+formattable(pca_rotation, 
+            list(
+  area(col= PC1:PC4) ~ formatter("span", style = x ~ ifelse(x > 0, 
+    style(color = "green", font.weight = "bold"),  style(color = "red", font.weight = "bold"))) 
+  ))
+  
 ```
 
-Examinando los vectores de carga, observamos que la componente 1 parece venir definida por variables relacionadas con el centro urbano. La segunda viene definida por la antigüedad de los edificios. La tercera por el número de habitaciónes por casa, que sabemos que estaba muy relacionada con el precio de las viviendas.
+Los vectores de carga de un PCA representan la contribución de cada variable original a las componentes principales que se han calculado. Cada columna en los datos que has proporcionado representa una componente principal, y cada fila representa una variable. El valor de cada celda en la matriz de carga es el coeficiente de la variable original en la componente principal correspondiente. Estos coeficientes pueden ser interpretados como la importancia o peso de esa variable para esa componente principal específica. Un valor alto (positivo o negativo) indica que la variable tiene una fuerte relación con esa componente principal, mientras que un valor cercano a cero indica que la variable tiene poco o ningún efecto en esa dimensión. Los signos de los valores de carga indican la dirección de la relación entre la variable y la componente principal, pero en el contexto del PCA, solo la magnitud de estos valores es relevante para determinar la importancia de la variable. Los signos son arbitrarios y pueden cambiar si se ejecuta el PCA nuevamente debido a la inversión del eje.
+
+En la componente principal 1, las tendencias generales observadas en esta componente principal son valores positivos altos para "indus", "nox", "age", "rad", y "tax", lo cual sugiere que estas variables contribuyen significativamente y en la misma dirección a la primera componente principal. Estas variables podrían estar asociadas con el centro urbano o el desarrollo industrial.
+
+En la componente principal 2, las variables "zn" y "crim" tienen los valores de carga más altos por magnitud pero en direcciones opuestas. "zn" representa las zonas residenciales, mientras que "crim" podría ser más alta en áreas urbanas densamente pobladas.
+
+La tercera componente principal está dominada por "rm" con un valor alto y positivo, lo que significa que "rm" es el contribuyente principal a esta componente.
+
+Para la cuarta componente principal, "ptratio" y "b" tienen los valores más altos, pero ptratio tiene una carga negativa fuerte, lo que podría indicar una relación inversa con esta componente. Esta dimensión podría capturar aspectos del entorno social o educativo en las áreas del estudio.
+
+A continuación, muestro gráficamente los resultados de las dos primeras componentes principapeles para ver la dirección e importancia de las mismas con lo descrito en este apartado.
 
 ```{r}
 fviz_pca_biplot(pca_result_boston,
@@ -406,11 +437,9 @@ fviz_pca_biplot(pca_result_boston,
                 )
 ```
 
-Vemos que la componente principal 1 aglomera el 51% de la varianza con valores altos de cos2. Un valor alto de cos2 para una variable en una componente principal indica que la componente explica una gran parte de la varianza de esa variable. En otras palabras, la variable está bien representada en esa dimensión. Esto significa que la dirección y magnitud de la variable tienen una fuerte correlación con la componente principal. Vemos que la variable del número de habitaciones (rm) tiene un cos2 bajo pero como vimos en la gráfica de barras anteriores, es porque viene definida por la componente principal 3.
+## Pregunta 5. Elección algoritmo
 
-Similarmente, para los individuos, un alto cos2 en una componente principal sugiere que la posición del individuo en el espacio de las componentes principales está fuertemente determinada por esa componente. Esto puede interpretarse como que el individuo tiene características que son bien capturadas o explicadas por esa componente principal.
-
-## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
+***¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?***
 
 Dada la naturaleza de los datos de Bostonhousing, considero que se debe utilizar un algoritmo de regresión para predecir la variable medv con respecto a las demás variables. Debido al tamaño de los datos los mejores algoritmos para esta práctica es algoritmo de k-vecinos más cercanos (KNN).
 
@@ -418,8 +447,9 @@ KNN es un algoritmo no paramétrico y puede capturar relaciones no lineales entr
 
 El algoritmo KNN es intuitivo y fácil de entender ya que predice el valor de una nueva observación promediando los valores de los K vecinos más cercanos. KNN tiene en cuenta la localidad de los datos, lo que podría ser particularmente relevante para datos inmobiliarios donde la ubicación y el vecindario juegan un papel crucial en el precio de las viviendas.
 
+## Pregunta 6. Transformación
 
-## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
+***¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.***
 
 Es importante prestar atención al preprocesamiento de los datos al utilizar KNN. Dado que KNN depende de la distancia entre las observaciones, las variables deben ser normalizadas o estandarizadas para que tengan la misma escala. De lo contrario, las variables con rangos más grandes podrían influir desproporcionadamente en la predicción.
 
@@ -434,7 +464,6 @@ datos_long_boston <- pivot_longer(BostonHousing.scaled, cols = -chas, names_to =
 
 ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
   geom_boxplot() +
-  geom_jitter(color = "black", size = 0.4, alpha = 0.6) +
   scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
   theme(
     legend.position = "none",
@@ -451,9 +480,11 @@ ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
 
 ```
 
-## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+## Pregunta 7. Algoritmo
 
-En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de BostonHousing escalados para entrenar el algoritmo de KNN. 
+***Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados***
+
+En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de BostonHousing escalados para entrenar el algoritmo de KNN.
 
 ```{r}
 set.seed(1234)
@@ -469,11 +500,11 @@ testSet.boston <- BostonHousing.scaled[-boston.TrainIdx.80, ]
 
 La función kknn es parte del paquete kknn, que está integrado con caret. Algunos de los hiperparámetros que se pueden ajustar al utilizar la función kknn a través de caret incluyen:
 
-1. kmax: El número de vecinos más cercanos a considerar en la votación o el promedio. Es el hiperparámetro principal del KNN. Un k pequeño puede hacer que el modelo sea sensible al ruido de los datos (sobreajuste), mientras que un k grande puede hacer que el modelo sea demasiado general (subajuste).
+1.  [kmax]{.underline}: El número de vecinos más cercanos a considerar en la votación o el promedio. Es el hiperparámetro principal del KNN. Un k pequeño puede hacer que el modelo sea sensible al ruido de los datos (sobreajuste), mientras que un k grande puede hacer que el modelo sea demasiado general (subajuste).
 
-2. distance: Define la métrica de distancia a utilizar para calcular la cercanía entre puntos. Por ejemplo, una distancia de 2 se refiere a la distancia euclidiana, mientras que 1 se refiere a la distancia de Manhattan. Distancias fraccionarias también son posibles y pueden ser útiles para capturar estructuras no lineales.
+2.  [distance]{.underline}: Define la métrica de distancia a utilizar para calcular la cercanía entre puntos. Por ejemplo, una distancia de 2 se refiere a la distancia euclidiana, mientras que 1 se refiere a la distancia de Manhattan. Distancias fraccionarias también son posibles y pueden ser útiles para capturar estructuras no lineales.
 
-3. kernel: Especifica la función de ponderación a aplicar a los vecinos. Algunas opciones incluyen "rectangular" (todos los vecinos ponderan igual), "triangular", "epanechnikov", "biweight", "triweight", "cos", entre otros. La ponderación puede afectar cómo influyen los vecinos en la predicción final, dando más peso a los vecinos más cercanos.
+3.  [kernel]{.underline}: Especifica la función de ponderación a aplicar a los vecinos. Algunas opciones incluyen "rectangular" (todos los vecinos ponderan igual), "triangular", "epanechnikov", "biweight", "triweight", "cos", entre otros. La ponderación puede afectar cómo influyen los vecinos en la predicción final, dando más peso a los vecinos más cercanos.
 
 Es importante destacar que el ajuste de hiperparámetros debe hacerse cuidadosamente. Por ejemplo, seleccionar k puede requerir la implementación de técnicas como la validación cruzada para encontrar un valor que equilibre bien el sesgo y la varianza. La elección de la métrica de distancia y la función de kernel debe basarse en el conocimiento del problema y el dominio de aplicación, así como en la experimentación y validación.
 
@@ -494,9 +525,12 @@ kknnControl.boston <- trainControl(method = "repeatedcv",
 ```
 
 En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 21 posibilidades combinatorias:
-- kmax: 5, 7, 9 , 11
-- distance: 1, 2, 3
-- kernel: rectangular, triangular, optimal
+
+-   kmax: 5, 7, 9 , 11
+
+-   distance: 1, 2, 3
+
+-   kernel: rectangular, triangular, optimal
 
 ```{r}
 set.seed(1234)
@@ -521,12 +555,16 @@ myfit.boston.cv10.rp3 <- train(y=y, x = x,
 plot(myfit.boston.cv10.rp3)
 
 ```
+
 En este primer modelo vemos que los mejores hiperparámetros son con una kmax de 5, distancia Manhattan de 1 y el kernel optimal. La RMSE y Rsquared dan valores muy buenos para este modelo.
 
 Vamos a probar con otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
-- kmax: 5, 7, 9 , 11
-- distance: 1
-- kernel: optimal, epanechnikov, biweight, triweight, cos, gaussian, rank
+
+-   kmax: 5, 7, 9 , 11
+
+-   distance: 1
+
+-   kernel: optimal, epanechnikov, biweight, triweight, cos, gaussian, rank
 
 ```{r}
 set.seed(1234)
@@ -550,9 +588,10 @@ myfit.boston.cv10.rp3.2 <- train(y=y, x = x,
 (myfit.boston.cv10.rp3.2best <- subset(myfit.boston.cv10.rp3.2$results, kmax == myfit.boston.cv10.rp3.2$bestTune$kmax & distance == myfit.boston.cv10.rp3.2$bestTune$distance & kernel == myfit.boston.cv10.rp3.2$bestTune$kernel))
 plot(myfit.boston.cv10.rp3.2)
 ```
-El mejor modelo posible lo seguimos encontrando con los hiperparámetros anteriores, por lo que no mejoramos el modelo. Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro modelo de entrenamiento nos da como resultado unas Rsquared de entorno 0.85 y un RMSE de 0.39 sin grandes cambios.
 
-```{r}
+El mejor modelo posible lo seguimos encontrando con los hiperparámetros anteriores, por lo que no mejoramos el modelo. Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro modelo de entrenamiento nos da como resultado unas Rsquared de entorno 0.85 y un RMSE de 0.39 sin grandes cambios, aunque hay unas pocas iteraciones con un RMSE un poco más alto y un Rsquared más bajo.
+
+```{r, warning=FALSE}
 resample <- myfit.boston.cv10.rp3.2$resample
 p1 <- ggplot(data = resample, aes(x = RMSE)) +
   geom_density(size = 2,color = "#8B1A1A") +
@@ -577,10 +616,17 @@ p2 <- ggplot(data = resample, aes(x = Rsquared)) +
 grid.arrange(p1, p2, ncol = 2)
 ```
 
-En la siguiente tabla vemos las variables más importantes para nuestro modelo situando a lstat y rm como las variables más importantes.
+En la siguiente tabla vemos las variables más importantes para nuestro modelo situando a "lstat" y "rm" como las variables más importantes. "Chas" no influye nada en nuestro modelo ya que los datos están muy desbalanceados.
 
 ```{r}
-varImp(myfit.boston.cv10.rp3.2)
+var.import.boston <- varImp(myfit.boston.cv10.rp3.2)
+var.import.boston.ordered <- var.import.boston$importance %>%
+  arrange(desc(Overall))
+
+formattable(var.import.boston.ordered, 
+            list(
+  Overall = color_tile("white", "#FC4E07")) 
+  )
 ```
 
 Vemos que los valores predecidos caen en lugares parecidos a los valores de train y de test sin que haya ningún outlier aparente.
@@ -625,7 +671,7 @@ plots$chas
 
 ```
 
-El análisis del error de predicción en relación con los valores reales de la variable medv en el conjunto de test revela una tendencia diferenciada en función del rango de precios de las viviendas. Observamos que para las viviendas con un valor cercano a la mediana de medv, las predicciones son notablemente precisas, reflejando un error bajo. No obstante, para las viviendas con un valor de medv superior al promedio, el modelo tiende a tener un rendimiento menos exacto, resultando en errores de predicción más elevados.
+El análisis del error de predicción en relación con los valores reales de la variable "medv" en el conjunto de test revela una tendencia diferenciada en función del rango de precios de las viviendas. Observamos que para las viviendas con un valor cercano a la mediana de medv, las predicciones son notablemente precisas, reflejando un error bajo. No obstante, para las viviendas con un valor de "medv" superior al promedio, el modelo tiende a tener un rendimiento menos exacto, resultando en errores de predicción más elevados.
 
 ```{r}
 testSet.boston %>%
@@ -638,7 +684,9 @@ testSet.boston %>%
   labs(title = "Predictive error test data", x = "Medv test data")
 ```
 
-Finalmente, para ver si incurrimos en overfitting o underfitting, calculamos el RMSE de los valores predichos con los datos de entrenamiento y con lo datos de test. Observamos que en los datos de entrenamiento el error es menor que en los datos de test pero la diferencia no es muy grande, siendo el error muy bajo. Encontramos un modelo bueno para predecir el precio de la vivienda con estas variables en la ciudad de Boston.
+Finalmente, para ver si incurrimos en overfitting o underfitting, calculamos el RMSE de los valores predichos con los datos de entrenamiento y con lo datos de test. Observamos que en los datos de entrenamiento el error es menor que en los datos de test pero la diferencia no es muy grande, siendo el error muy bajo.
+
+**Encontramos un modelo bueno para predecir el precio de la vivienda con estas variables en la ciudad de Boston.**
 
 ```{r, warning=FALSE}
 preds.boston.train <- predict(myfit.boston.cv10.rp3.2$finalModel, newdata = trainSet.boston)
@@ -647,7 +695,6 @@ cat("El error RMSE de los datos de entrenamiento es",sqrt((1/nrow(trainSet.bosto
 
 cat("El error RMSE de los datos de evaluación es", sqrt((1/nrow(testSet.boston)) * sum((testSet.boston$medv - preds.boston)^2)),"\n")
 ```
-
 
 # LetterRecognition
 
@@ -658,7 +705,9 @@ library(mlbench)
 data(LetterRecognition)
 ```
 
-## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
+## Pregunta 1. Tamaño y tipo
+
+***¿Qué tamaño tiene? ¿De qué tipo son las variables?***
 
 ```{r}
 str(LetterRecognition)
@@ -676,19 +725,55 @@ Hmisc::describe(LetterRecognition)
 
 No tiene valores nulos y las distribuciones van de 0 a 15 en todas las variables menos en la variable dependiente lettr.
 
-## Pregunta 2. Explica qué representan los ejemplos
+## Pregunta 2. Representación ejemplos
+
+***Explica qué representan los ejemplos***
 
 Los datos de LetterRecognition del paquete mlbench en R están diseñados para la tarea de identificar letras del alfabeto inglés en mayúsculas a partir de imágenes en píxeles blanco y negro. Cada imagen de letra se basa en 20 fuentes diferentes, y cada letra de estas fuentes se distorsionó aleatoriamente para producir un conjunto de 20,000 estímulos únicos. Estos estímulos se convirtieron en 16 atributos numéricos primitivos, como momentos estadísticos y recuentos de bordes, que se escalaron para ajustarse a un rango de valores enteros de 0 a 15.
 
 El dataset contiene 20,000 observaciones con 17 variables. La primera variable es categórica y tiene niveles de la A a la Z, representando cada una de las letras del alfabeto. Las 16 variables restantes son numéricas y representan diversas características estadísticas y geométricas de las imágenes de las letras.
 
-## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
+1.  [x.box]{.underline}: La posición horizontal de la caja que encierra la letra (el rectángulo más pequeño que puede contener la imagen de la letra).
+
+2.  [y.box]{.underline}: La posición vertical de la caja que encierra la letra.
+
+3.  [width]{.underline}: El ancho de la caja en píxeles.
+
+4.  [high]{.underline}: La altura de la caja en píxeles.
+
+5.  [onpix]{.underline}: El total de píxeles encendidos (es decir, píxeles que contienen parte de la letra) en la imagen.
+
+6.  [x.bar]{.underline}: La media de la posición horizontal de todos los píxeles encendidos.
+
+7.  [y.bar]{.underline}: La media de la posición vertical de todos los píxeles encendidos.
+
+8.  [x2bar]{.underline}: La varianza de la posición horizontal de todos los píxeles encendidos.
+
+9.  [y2bar]{.underline}: La varianza de la posición vertical de todos los píxeles encendidos.
+
+10. [xybar]{.underline}: La correlación entre la posición horizontal y vertical de los píxeles encendidos.
+
+11. [x2ybr]{.underline}: La media del producto de x por la posición vertical de los píxeles encendidos.
+
+12. [xy2br]{.underline}: La media del producto de y por la posición horizontal de los píxeles encendidos.
+
+13. [x.ege]{.underline}: La cantidad de bordes horizontales (transiciones de claro a oscuro).
+
+14. [xegvy]{.underline}: La correlación de x.ege con la variable y.
+
+15. [y.ege]{.underline}: La cantidad de bordes verticales (transiciones de claro a oscuro).
+
+16. [yegvx]{.underline}: La correlación de y.ege con la variable x.
+
+## Pregunta 3. Tipo de problema
+
+***¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?***
 
 Este conjunto de datos es un problema de clasificación. La razón es que el objetivo es categorizar cada representación digital de una letra en una de varias clases predefinidas, que son las letras del alfabeto. Por lo tanto, el conjunto de datos es un ejemplo clásico de un problema de clasificación multiclase, donde el modelo de aprendizaje automático debe predecir cuál de las múltiples categorías (lettr) corresponde a las características dadas de una imagen.
 
 Para un problema de clasificación, es crucial examinar la distribución de los ejemplos entre las clases. Una distribución equilibrada de ejemplos asegura que el modelo de aprendizaje automático tenga suficientes datos para aprender las características distintivas de cada clase. Por otro lado, una distribución desequilibrada puede llevar a un modelo sesgado que prefiera las clases con más ejemplos.
 
-A continuación mostramos la distribucione de las frecuencias de cada clase de la variable lettr. Vemos que la distribución es bastante homogénea entre clases ya que ronda las 750 instancias de cada letra.
+A continuación mostramos las distribuciones de las frecuencias de cada clase de la variable "lettr". Vemos que la distribución es bastante homogénea entre clases ya que ronda las 750 instancias de cada letra.
 
 ```{r}
 table(LetterRecognition$lettr)
@@ -709,9 +794,9 @@ LetterRecognition %>%
   labs(title = "Letters") 
 ```
 
+## Pregunta 4. Sesgos
 
-
-## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
+***Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?***
 
 Para contrastar si nuestros datos son adecuados para hacer el analisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
 
@@ -722,7 +807,7 @@ bart_spher(LetterRecognition[,-1])
 KMOS(LetterRecognition[,-1])
 ```
 
-Vamos a ver la correlación que hay entre las variables predictoras para ver cómo se agrupan. Vemos que hay 2 grupos de variables muy correlados entre sí por lo que podriamos pensar que son candidatos a ser importantes en distintas componentes principales. Luego hay otro cluster más diverso.
+Vamos a ver la correlación que hay entre las variables predictoras para ver cómo se agrupan. Vemos que hay 2 grupos de variables muy correlados positivamente entre sí por lo que podriamos pensar que son candidatos a ser importantes en distintas componentes principales. Luego hay otro cluster más diverso en la correlación.
 
 ```{r}
 correlations <- cor(LetterRecognition[,c(-1)])
@@ -786,7 +871,7 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
   geom_line(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
   geom_point(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), color = "red") +
   geom_bar(data = df_cum_var_exp[1:10,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
-  annotate("text", x = 9, y = 0.75, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  annotate("text", x = 9, y = 0.75, label = "Cumulative Scree \n Plot", color = "#8B1A1A", size = 4) +
   geom_text(data = df_cum_var_exp[1:10,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
@@ -808,9 +893,9 @@ pheatmap(sesgos.letter,
          cutree_cols = 3)
 ```
 
-Cemos que las variables "x.ege", "y.box", "high", "onpix", "x.box" y "width" tienen una correlacion muy fuerte con la componente principal 1. Curiosamente, son las mismas variables que en el anterior mapa de correlación entre variables tenian una correlación muy fuerte entre ellas.
+Vemos que las variables "x.ege", "y.box", "high", "onpix", "x.box" y "width" tienen una correlacion muy fuerte con la componente principal 1. Curiosamente, son las mismas variables que en el anterior mapa de correlación entre variables tenian una correlación muy fuerte entre ellas.
 
-Vamos a ver la distribución de nuestra variables en los dos componentes principales 1 y 2
+Vamos a ver la distribución de nuestra variables en los dos componentes principales 1 y 2.
 
 ```{r, warning=FALSE}
 pca.letter <- as.data.frame(pca_result.letter$x[,1:7], stringsAsFactors=F)
@@ -895,11 +980,26 @@ grid.arrange(p12, p23, ncol= 2)
 
 ```
 
-Ahora lo muestro numéricamente los vectores de carga de cada variable a cada componente principal. También muestro la importancia de varianza explicada en cada componente mediante gráficas de barras de las 3 componentes principales.
+Ahora mostramos los valores numéricos de los vectores de carga numérica para las tres primeras componentes principales.
 
 ```{r}
-pca_result.letter$rotation[,1:3]
+pca_rotation <- round(data.frame(pca_result.letter$rotation[,1:3]),2)
+pca_rotation <- pca_rotation[order(-pca_rotation[,1]),]
+
+formattable(pca_rotation, 
+            list(
+  area(col= PC1:PC3) ~ formatter("span", style = x ~ ifelse(x > 0, 
+    style(color = "green", font.weight = "bold"),  style(color = "red", font.weight = "bold"))) 
+  ))
 ```
+
+Las variables con mayores cargas en la primera componente principañ ("x.box", "y.box", "width", "high", "onpix") parecen estar relacionadas con las dimensiones físicas de las cajas que encierran las letras y la cantidad de píxeles encendidos (onpix), lo que sugiere que la PC1 podría estar capturando información relacionada con el tamaño y la ocupación espacial general de las letras.
+
+Las variables con las mayores cargas absolutas en la segunda componente son "y.bar" y "x2ybr", ambas con valores negativos, y "x.bar" con un valor positivo significativo. Esto indica que PC2 podría estar capturando variaciones en la distribución espacial de los píxeles en las letras, posiblemente reflejando características como la simetría o distribución vertical/horizontal de los píxeles.
+
+Las variables "x2bar" y "xybar" tienen cargas significativas en la componente 3, aunque en direcciones opuestas. "x2bar" tiene una carga positiva, y xybar tiene una carga negativa. Estas cargas sugieren que la componente 3 podría estar asociada con la dispersión o la alineación de los píxeles en las imágenes de las letras, lo que podría interpretarse como características que capturan la textura o la estructura interna de las letras.
+
+Ahora vamos a ver la explicación de cada variable a la varianza de cada componente principal.
 
 ```{r}
 p1 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 1, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 1")
@@ -910,24 +1010,35 @@ grid.arrange(p1, p2, p3, ncol=3)
 
 ```
 
-## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
+Las cinco variables que mejor se proyectan en la primera componente principal son mostradas en el primer gráfico. La variable "y.box" tiene el valor de Cos2 más alto, lo que indica que es la que mejor se representa en esta dimensión. Esto significa que "y.box" contribuye significativamente a la varianza capturada por la primera componente principal.
 
-KNN es una elección razonable para el conjunto de datos letterRecognition debido a su simplicidad, su capacidad para manejar clasificaciones multiclase y su utilidad en situaciones donde la clasificación depende de la similitud de las instancias en un espacio de características. Su robustez frente a las variaciones complejas en los datos lo hace adecuado para reconocer patrones visuales, lo cual es esencial en la clasificación de letras basada en atributos visuales.
+El segundo gráfico muestra las cinco variables con el mayor Cos2 para la segunda componente principal. La variable "x2ybar" tiene un valor de Cos2 mucho mayor en comparación con las otras cuatro, lo que sugiere que tiene una influencia preponderante en esta segunda dimensión.
+
+La tercera gráfica se presentan las cinco variables más importantes en términos de representación en la tercera componente principal. La variable "x2ybar" también aparece aquí con el valor más alto, seguida de 'y2bar', 'xybar', 'x.ege', y 'x2ybr', lo que sugiere que estas variables también son importantes en la definición de esta tercera componente principal.
+
+## Pregunta 5. Elección algoritmo
+
+***¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?***
+
+KNN es una elección razonable para el conjunto de datos letterRecognition debido a su capacidad para manejar clasificaciones multiclase y su utilidad en situaciones donde la clasificación depende de la similitud de las instancias en un espacio de características. Su robustez frente a las variaciones complejas en los datos lo hace adecuado para reconocer patrones visuales, lo cual es esencial en la clasificación de letras basada en atributos visuales.
 
 Además, KNN no hace suposiciones sobre la distribución subyacente de los datos, lo cual es ventajoso en el procesamiento de imágenes, donde las distribuciones pueden ser complicadas y no lineales. La capacidad de KNN para adaptarse a los datos localmente, ajustando el número de vecinos, permite una gran flexibilidad para encontrar estructuras en el espacio de características que son significativas para la clasificación.
 
 Sin embargo, es importante destacar que KNN tiene sus desventajas. La principal es su naturaleza computacionalmente intensiva, especialmente en conjuntos de datos grandes con muchas características, debido a la necesidad de calcular la distancia entre pares para cada instancia de prueba contra todas las instancias de entrenamiento. Además, KNN puede ser sensible a características irrelevantes o redundantes, por lo que un buen preprocesamiento y posiblemente la selección de características son pasos cruciales para su rendimiento óptimo.
 
+## Pregunta 6. Transformación
 
-## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
+***¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.***
 
-En este caso, los datos fueron escalados previamente para situarlos en un rango entre 0 y 15, por lo que no consideraría escalar los datos. 
+En este caso, los datos fueron escalados previamente para situarlos en un rango entre 0 y 15, por lo que no consideraría escalar los datos.
 
 Por otro lado, podría reducir la dimensionalidad a 7 u 8 dimensiones ya que explican más del 80% de la varianza de los datos en el caso de que la capacidad computacional se viese comprometida. En este caso, no voy a reducir la dimensionalidad y voy a seguir con los datos sin transformar.
 
-## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
+## Pregunta 7. Algoritmo
 
-En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de letterRecognition para entrenar el algoritmo de KNN. Vemos que el porcentaje de cada letra en entrenamiento y test se mantiene.
+***Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados***
+
+En primer lugar, vamos a generar los datos de entrenamiento y test de los datos de letterRecognition para entrenar el algoritmo de KNN. Vemos que el porcentaje de cada letra en entrenamiento y test se mantiene.
 
 ```{r}
 set.seed(1234)
@@ -961,9 +1072,12 @@ kknnControl.letter<- trainControl(method = "cv",
 ```
 
 En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 9 posibilidades combinatorias:
-- kmax: 5, 7, 9 
-- distance: 1, 2, 3
-- kernel: optimal
+
+-   kmax: 5, 7, 9
+
+-   distance: 1, 2, 3
+
+-   kernel: optimal
 
 ```{r}
 set.seed(1234)
@@ -993,9 +1107,12 @@ plot(myfit.letter.cv10)
 En este primer modelo vemos que los mejores hiperparámetros son con una kmax de 9, distancia Manhattan de 1 y el kernel optimal. La Accuracy (0.95) y Kappa (0.95) dan valores muy buenos para este modelo.
 
 Vamos a probar con kmax más altos ya que parece que la tendencia del kmax es a subir. Tambien probar otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
-- kmax: 9, 10, 11
-- distance: 1
-- kernel: rectangular, triangular, optimal
+
+-   kmax: 9, 10, 11
+
+-   distance: 1
+
+-   kernel: rectangular, triangular, optimal
 
 ```{r}
 mygrid.letter <- expand.grid(kmax = seq(9,11,1),
@@ -1017,12 +1134,15 @@ myfit.letter.cv10.2 <- train(y=y, x=x,
 plot(myfit.letter.cv10.2)
 ```
 
-En este segundo modelo vemos que los mejores hiperparámetros sigue siendo una kmax de 9 y el kernel triangula. La Accuracy (0.96) y Kappa (0.96) dan valores muy buenos para este modelo, mejorando los valores anteriores.
+En este segundo modelo vemos que los mejores hiperparámetros sigue siendo una kmax de 9 y el kernel triangular. La Accuracy (0.96) y Kappa (0.96) dan valores muy buenos para este modelo, mejorando los valores anteriores.
 
 Vamos a probar con kmax estable en 9 pero con otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
-- kmax: 9,
-- distance: 1
-- kernel: triangular, epanechnikov, biweight, triweight, cos, inv, gaussian, rank
+
+-   kmax: 9,
+
+-   distance: 1
+
+-   kernel: triangular, epanechnikov, biweight, triweight, cos, inv, gaussian, rank
 
 ```{r}
 mygrid.letter <- expand.grid(kmax = 9,
@@ -1048,7 +1168,7 @@ plot(myfit.letter.cv10.3)
 Seguimos viendo que otros kernel no mejoramos el modelo así que el mejor modelo para este dataset es con una kmax de 9, distancia Manhattan de 1 y kernel triangular.
 
 Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro mejor modelo de entrenamiento nos da como resultado un accuracy de entorno 0.96 y un Kappa de 0.96. Estos valores son muy altos y muy buenos, por lo que deberiamos mirar si nuestro modelo ha caido en overfitting.
- 
+
 ```{r}
 resample <- myfit.letter.cv10.3$resample
 p1 <- ggplot(data = resample, aes(x = Accuracy)) +
@@ -1071,20 +1191,24 @@ p2 <- ggplot(data = resample, aes(x = Kappa)) +
              linetype = "dashed") +
    annotate("text", x = 0.95, y = 6, 
            label = paste("Kappa", "\n", round(median(resample$Kappa), 3)), color = "#c0b88e", size = 4) +
-  xlim(c(0, 1))
+  xlim(c(0.93, 0.97))
 
 grid.arrange(p1, p2, ncol = 2)
 ```
 
-En la siguiente tabla vemos las variables más importantes para nuestro modelo para cada una de las letras de nuestra variable dependiente lettr.
+En la siguiente tabla vemos las variables más importantes para nuestro modelo para cada una de las letras de nuestra variable dependiente lettr. La variable "y2bar" tiene un fuerte importancia en cada una de las letras. En cambio, "y.box" no es importante en nuestro modelo para predecir letras a partir de estas variables.
 
 ```{r}
-varImp(myfit.letter.cv10.3)
+import <- varImp(myfit.letter.cv10.3)
+import$importance <- round(import$importance[order(-import$importance[,1]),], 2)
+formattable(import$importance, list(
+  area(col= A:Z) ~ color_bar("lightblue")
+  ))
 ```
 
 Vamos ahora a predecir las clases de los datos que tenemos de test para este dataset que hemos generado anteriormente. Despues de eso vamos mostrar la información de la matriz de confusión de estos resultados.
 
-Una matriz de confusión es una herramienta poderosa utilizada en el campo del aprendizaje automático para evaluar el rendimiento de los modelos de clasificación. Es una tabla específica que permite la visualización del desempeño de un algoritmo de clasificación, mostrando de manera explícita cuándo las clases son confundidas por el modelo durante la predicción. 
+Una matriz de confusión es una herramienta poderosa utilizada en el campo del aprendizaje automático para evaluar el rendimiento de los modelos de clasificación. Es una tabla específica que permite la visualización del desempeño de un algoritmo de clasificación, mostrando de manera explícita cuándo las clases son confundidas por el modelo durante la predicción.
 
 La matriz de confusión compara las etiquetas predichas por el modelo contra las etiquetas reales (verdaderas) que se encuentran en el conjunto de datos de prueba. La matriz de confusión permite calcular métricas importantes como la precisión, la sensibilidad, la especificidad, y el valor predictivo. Tambien ayuda a entender los tipos de errores que está cometiendo el modelo (por ejemplo, si está prediciendo falsos positivos más a menudo que falsos negativos).
 
@@ -1114,9 +1238,9 @@ ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq))
 
 ```
 
-Lo que vemos en el heatmap son los fallos cometimos de nuestro modelo. Por ejemplo, ha cometido casi 10 fallos al predecir una letra P en lugar de una F. Otro fallo que ha cometido alguna que otra vez es predecir una Q en lugar de una O. 
+Lo que vemos en el heatmap son los fallos cometimos de nuestro modelo. Por ejemplo, ha cometido casi 10 fallos al predecir una letra P en lugar de una F. Otro fallo que ha cometido alguna que otra vez es predecir una Q en lugar de una O. Son fallos por una similitud alta a la hora de manuscribir las letras.
 
-Aun con estos pocos fallos, nuestro modelo predice perfectamente con este modelo de entrenamiento las distintas clases. Vamos a ver a continuación sin este modelo ha incurrido en overfitting.
+Aun con estos pocos fallos, nuestro modelo predice perfectamente con este modelo de entrenamiento las distintas clases. Vamos a ver a continuación si este modelo ha incurrido en overfitting.
 
 ```{r}
 # Evaluar el rendimiento en el conjunto de entrenamiento
@@ -1129,8 +1253,6 @@ conf_test <- confusionMatrix(testPredictions, testSet.letter$lettr)
 
 conf_train$overall
 conf_test$overall
-
-
 ```
 
 Al calcular el accuracy de los valores predichos con los datos de entrenamiento y el accuracy de los datos de test, observamos que en los datos de entrenamiento la precisión es mayor que en los datos de test pero la diferencia no es muy grande, siendo el accuracy también muy alto. Encontramos un modelo muy bueno para predecir el tipo de letra según las variables recogidas en este dataset.
@@ -1143,7 +1265,9 @@ Los datos de este dataset se localizan en el archivo csv "diabetesBRFSS2015.csv"
 diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
 ```
 
-## Pregunta 1. ¿Qué tamaño tiene? ¿De qué tipo son las variables?
+## Pregunta 1. Tamaño y tipo
+
+***¿Qué tamaño tiene? ¿De qué tipo son las variables?***
 
 ```{r}
 str(diabetesBRFSS2015)
@@ -1163,44 +1287,48 @@ Hmisc::describe(diabetesBRFSS2015)
 
 No hay datos nulos en nuestro dataset. Hay algunas variables categóricas bastante balanceadas pero otras no. Parece que hay algunas variables con varias clases e incluso otras que pueden ser numéricas.
 
-## Pregunta 2. Explica qué representan los ejemplos
+## Pregunta 2. Representación ejemplos
+
+***Explica qué representan los ejemplos***
 
 Los datos del dataset de diabetesBRFSS2015 representa información de encuestas sobre estilos de vida de personas en general, incluyendo su diagnóstico de diabetes. Cada instancia en este conjunto de datos representa a una persona que participó en este estudio. El objetivo principal de este conjunto de datos es entender mejor la relación entre el estilo de vida y la diabetes en EE.UU.
 
 El conjunto de datos incluye 22 variables que abarcan desde información demográfica hasta resultados de exámenes de laboratorio y respuestas a preguntas de encuestas. Aquí hay un resumen de algunas de las variables clave:
 
-1. Diabetes_binary: Variable objetivo binaria que indica si el paciente tiene diabetes (incluyendo prediabetes) o no.
-2. HighBP: Presión arterial alta, indicada binariamente 0 = no 1 = si.
-3. HighChol: Colesterol alto, también indicado de manera binaria 0 = no 1 = si.
-4. CholCheck: Indica si el paciente ha tenido un chequeo de colesterol en los últimos 5 años 0 = no 1 = si.
-5. BMI: Índice de masa corporal, una medida cuantitativa.
-6. Smoker: Indica si el paciente ha fumado al menos 100 cigarrillos en su vida 0 = no 1 = si.
-7. Stroke: Indica si al paciente le han diagnosticado un derrame cerebral 0 = no 1 = si.
-8. HeartDiseaseorAttack: Presencia de enfermedad coronaria o ataque cardíaco, indicado binariamente 0 = no 1 = si.
-9. PhysActivity: Actividad física en los últimos 30 días, excluyendo el trabajo 0 = no 1 = si, indicado binariamente.
-10. Fruits: Consumo diario de frutas, indicado binariamente 0 = no 1 = si.
-11. Veggies: Consumo diario verduras, indicado binariamente 0 = no 1 = si.
-12. HvyAlcoholConsump: Consumo excesivo de alcohol 0 = no 1 = si.
-13. AnyHealthcare: Cobertura de salud de cualquier tipo 0 = no 1 = si.
-14. NoDocbcCost: Si hubo un momento en los últimos 12 meses en que el paciente necesitaba ver a un doctor pero no pudo debido al costo 0 = no 1 = si.
-15. GenHlth: Estado general de salud, medido en una escala de 1 a 5, 1 = excelente 2 = muy buena 3 = buena 4 = poca 5 = muy poca. 
-16. MentHlth:  Salud mental indicada por el número de días en los últimos 30 días que no fueron buenos.
-17. PhysHlth: Salud física indicada por el número de días en los últimos 30 días que no fueron buenos.
-18. DiffWalk: Dificultad para caminar o subir escaleras. 0 = no 1 = si.
-19. Sex: Género del paciente. 0 = mujer 1 = hombre
-20. Age: Edad, categorizada en 13 niveles de edad. 1 = 18-24, 9 = 60-64, 13 = 80 o mayores.
-21. Education: Nivel de educación, en una escala de 1 a 6, 1 = Nunca fue a la escuela, 2 = Grados 1 a 8 (Elemental), 3 = Grados 9 a 11 (Algo de instituto) 4 = Grados 12 or graduación (Graduado de instituto) 5 = Universidad de 1 a 3 años (Asistió a la universidad) 6 = Universidad 4 años o más (Graduado universitario).
-22. Income: Ingresos, categorizados en una escala de 1 a 8, 1 = menos de 10,000 USD, 5 = menos de 35,000 USD, 8 = 75,000 USD o mas.
+1.  [Diabetes_binary]{.underline}: Variable objetivo binaria que indica si el paciente tiene diabetes (incluyendo prediabetes) o no.
+2.  [HighBP]{.underline}: Presión arterial alta, indicada binariamente 0 = no 1 = si.
+3.  [HighChol]{.underline}: Colesterol alto, también indicado de manera binaria 0 = no 1 = si.
+4.  [CholCheck]{.underline}: Indica si el paciente ha tenido un chequeo de colesterol en los últimos 5 años 0 = no 1 = si.
+5.  [BMI]{.underline}: Índice de masa corporal, medida cuantitativa.
+6.  [Smoker]{.underline}: Indica si el paciente ha fumado al menos 100 cigarrillos en su vida 0 = no 1 = si.
+7.  [Stroke]{.underline}: Indica si al paciente le han diagnosticado un derrame cerebral 0 = no 1 = si.
+8.  [HeartDiseaseorAttack]{.underline}: Presencia de enfermedad coronaria o ataque cardíaco, indicado binariamente 0 = no 1 = si.
+9.  [PhysActivity]{.underline}: Actividad física en los últimos 30 días, excluyendo el trabajo 0 = no 1 = si, indicado binariamente.
+10. [Fruits]{.underline}: Consumo diario de frutas, indicado binariamente 0 = no 1 = si.
+11. [Veggies]{.underline}: Consumo diario verduras, indicado binariamente 0 = no 1 = si.
+12. [HvyAlcoholConsump]{.underline}: Consumo excesivo de alcohol 0 = no 1 = si.
+13. [AnyHealthcare]{.underline}: Cobertura de salud de cualquier tipo 0 = no 1 = si.
+14. [NoDocbcCost]{.underline}: Si hubo un momento en los últimos 12 meses en que el paciente necesitaba ver a un doctor pero no pudo debido al costo 0 = no 1 = si.
+15. [GenHlth]{.underline}: Estado general de salud, medido en una escala de 1 a 5, 1 = excelente 2 = muy buena 3 = buena 4 = poca 5 = muy poca.
+16. [MentHlth]{.underline}: Salud mental indicada por el número de días en los últimos 30 días que no fueron buenos.
+17. [PhysHlth]{.underline}: Salud física indicada por el número de días en los últimos 30 días que no fueron buenos.
+18. [DiffWalk]{.underline}: Dificultad para caminar o subir escaleras. 0 = no 1 = si.
+19. [Sex]{.underline}: Género del paciente. 0 = mujer 1 = hombre
+20. [Age]{.underline}: Edad, categorizada en 13 niveles de edad. 1 = 18-24, 9 = 60-64, 13 = 80 o mayores.
+21. [Education]{.underline}: Nivel de educación, en una escala de 1 a 6, 1 = Nunca fue a la escuela, 2 = Grados 1 a 8 (Elemental), 3 = Grados 9 a 11 (Algo de instituto) 4 = Grados 12 or graduación (Graduado de instituto) 5 = Universidad de 1 a 3 años (Asistió a la universidad) 6 = Universidad 4 años o más (Graduado universitario).
+22. [Income]{.underline}: Ingresos, categorizados en una escala de 1 a 8, 1 = menos de 10,000 USD, 5 = menos de 35,000 USD, 8 = 75,000 USD o mas.
 
 Estas variables ofrecen una visión integral de los factores de riesgo, condiciones de salud y estilos de vida de los participantes, permitiendo realizar análisis detallados sobre la relación entre estos factores y la diabetes.
 
 <https://archive.ics.uci.edu/dataset/891/cdc+diabetes+health+indicators>
 
-## Pregunta 3. ¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?
+## Pregunta 3. Tipo de problema
 
-El problema planteado en este conjunto de datos se enmarca claramente como un problema de clasificación. Esto se debe a que la variable objetivo, Diabetes_binary, es categórica y denota la presencia o ausencia de diabetes en los participantes. En los problemas de clasificación, el objetivo es predecir una etiqueta de clase para cada instancia en el conjunto de datos basándose en las características observadas. La distinción entre tener o no tener diabetes representa una clasificación fundamental entre dos estados de salud distintos, lo cual es un objetivo común en el análisis de datos de salud.
+***¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?***
 
-Vamos a ver la distribución de los datos de la variable dependiente diabetes_binary.
+El problema planteado en este conjunto de datos se enmarca claramente como un problema de clasificación. Esto se debe a que la variable objetivo, "Diabetes_binary", es categórica y denota la presencia o ausencia de diabetes en los participantes. En los problemas de clasificación, el objetivo es predecir una etiqueta de clase para cada instancia en el conjunto de datos basándose en las características observadas. La distinción entre tener o no tener diabetes representa una clasificación fundamental entre dos estados de salud distintos, lo cual es un objetivo común en el análisis de datos de salud.
+
+Vamos a ver la distribución de los datos de la variable dependiente "diabetes_binary".
 
 ```{r}
 n<-nrow(diabetesBRFSS2015)
@@ -1245,7 +1373,7 @@ for(variable in unique(data_long$Variable)) {
     labs(title = variable,
          x = "", y = "Percentage") +
     theme(legend.position = "none") +
-    theme(plot.title = element_text(size = 10), axis.title = element_text(size = 8))
+    theme(plot.title = element_text(size = 12), axis.title = element_text(size = 10))
   
   plots[[variable]] <- p
 }
@@ -1258,11 +1386,11 @@ grid.arrange(plots$DiffWalk, plots$Sex, ncol=3)
 
 ```
 
-En estas graficas de barras podemos concluir que casi todas las variables pueden estar muy relacionadas con pacientes con diabetes. Algunas influyen a tener a diabetes como: HighBP, HighChol, CholCheck, Smoker, Stroke, HeartDiseaseorAttack, DiffWalk y Sex (hombre más propenso). Con esto podemos decir que unos tener una mala salud como una presión arterial alta, colestererol o ser fumador influyen en tener diabetes. El ictus y el ataque cardiaco podría estar relacionado con las variables anteriores por lo que son tambien variables susceptibles de ser predictoras de tener diabetes. En el caso de los chequeo del colesterol en los ultimos 5 años aumenta en pacientes diabeticos. Esto es debido que al ser diagnosticados estos pacientes requieren un mayor seguimiento por parte del personal sanitario.
+En estas graficas de barras podemos concluir que casi todas las variables pueden estar muy relacionadas con pacientes con diabetes. Algunas influyen a tener a diabetes como: "HighBP", "HighChol", "CholCheck", "Smoker", "Stroke", "HeartDiseaseorAttack", "DiffWalk" y "Sex" (hombre más propenso). Con esto podemos decir que unos tener una mala salud como una presión arterial alta, colestererol o ser fumador influyen en tener diabetes. El ictus y el ataque cardiaco podría estar relacionado con las variables anteriores por lo que son tambien variables susceptibles de ser predictoras de tener diabetes. En el caso de los chequeo del colesterol en los ultimos 5 años aumenta en pacientes diabeticos. Esto es debido que al ser diagnosticados estos pacientes requieren un mayor seguimiento por parte del personal sanitario.
 
-Hay otros casos que las variables influyen en no tener diabetes como: PhysHlth, Fruits, Veggies. Es decir que hacer ejercicio fisico, comer frutas y verduras ayudan a evitar tener diabetes.
+Hay otros casos que las variables influyen en no tener diabetes como: "PhysHlth", "Fruits", "Veggies". Es decir que hacer ejercicio fisico, comer frutas y verduras ayudan a evitar tener diabetes.
 
-Hay tres variables que no varían mucho entre pacientes sanos y diabéticos que son  HvyAlcoholConsump, AnyHealthcare y NoDocbcCost. 
+Hay tres variables que no varían mucho entre pacientes sanos y diabéticos que son "HvyAlcoholConsump", "AnyHealthcare" y "NoDocbcCost".
 
 Vamos a mirar ahora las variables con varias clases.
 
@@ -1303,11 +1431,11 @@ for(variable in unique(data_long$Variable)) {
 grid.arrange(plots$GenHlth, plots$Age, plots$Education, plots$Income, ncol=2)
 ```
 
-Aquí ya vemos algunas distribuciones interesantes. En estos gráficos vemos en color azul los pacientes sanos y en rojo los pacientes diabéticos. 
+Aquí ya vemos algunas distribuciones interesantes. En estos gráficos vemos en color azul los pacientes sanos y en rojo los pacientes diabéticos.
 
-En general las personas sanas se sienten mejor que los pacientes diabéticos ya que el número 1 en la escala es estado excelente. Con respecto a la edad, vemos que la mayoría de personas entrevistadas para este estudio se situan entre los 50 y 72 años (7-11). La diabetes puede clasificarse principalmente en dos tipos: Diabetes de tipo 1  y diabetes de tipo 2, cada una de ellas con diferentes edades típicas de aparición. La diabetes de tipo 1, menos frecuente, suele diagnosticarse en niños, adolescentes o adultos jóvenes, pero puede aparecer a cualquier edad. Por otro lado, la diabetes de tipo 2 es más frecuente en adultos mayores de 45 años, aunque cada vez se diagnostica en personas más jóvenes, incluidos adolescentes y adultos jóvenes, debido al aumento de las tasas de obesidad. Parece lógica esta distribución de los datos ya que el mayor número de muestras se situan en esta franja crítica de aparición de la enfermedad, aunque para saber si la variable edad es un factor de riesgo, se debería tener el mismo número de muestras a cada edad. Considero por tanto que esta variable contiene un sesgo importante para nuestro modelo.
+En general, las personas sanas se sienten mejor que los pacientes diabéticos ya que el número 1 en la escala es estado "excelente". Con respecto a la edad, vemos que la mayoría de personas entrevistadas para este estudio se situan entre los 50 y 72 años (7-11). La diabetes puede clasificarse principalmente en dos tipos: Diabetes de tipo 1 y diabetes de tipo 2, cada una de ellas con diferentes edades típicas de aparición. La diabetes de tipo 1, menos frecuente, suele diagnosticarse en niños, adolescentes o adultos jóvenes, pero puede aparecer a cualquier edad. Por otro lado, la diabetes de tipo 2 es más frecuente en adultos mayores de 45 años, aunque cada vez se diagnostica en personas más jóvenes, incluidos adolescentes y adultos jóvenes, debido al aumento de las tasas de obesidad. Parece lógica esta distribución de los datos ya que el mayor número de muestras se situan en esta franja crítica de aparición de la enfermedad, aunque para saber si la variable edad es un factor de riesgo, se debería tener el mismo número de muestras a cada edad. Considero por tanto que esta variable contiene un sesgo importante para nuestro modelo.
 
-Otro sesgo importante que veo en estos datos, se muestra en las gráficas de distribución de eduacation e income. Vemos que la mayoría de las personas encuestadas para este estudio son personas con alto status socioeconómico ya que tienen altos niveles de estudios y un porcentaje alto de ingresos económicos, sobre todo en la franja de más de 75.000 USD. Al preguntar a este tipo de personas, otras variables se ven muy sesgadas a la hora de optimizar nuestro modelo como por ejemplo: NoDocbcCost (no poder costearse un médico), AnyHealthcare (tenencia de seguro médico) o PhysActivity (actividad física). 
+Otro sesgo importante que veo en estos datos, se muestra en las gráficas de distribución de eduacation e income. Vemos que la mayoría de las personas encuestadas para este estudio son personas con alto status socioeconómico ya que tienen altos niveles de estudios y un porcentaje alto de ingresos económicos, sobre todo en la franja de más de 75.000 USD. Al preguntar a este tipo de personas, otras variables se ven muy sesgadas a la hora de optimizar nuestro modelo como por ejemplo: "NoDocbcCost" (no poder costearse un médico), "AnyHealthcare" (tenencia de seguro médico) o "PhysActivity" (actividad física), ya que todas ellas dependen, de manera directa o indirecta, del nivel económico que tenga esa persona.
 
 Vamos a estudiar ahora las variables continuas del dataset.
 
@@ -1340,37 +1468,37 @@ p3 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill
 grid.arrange(p1, p2, p3, ncol = 1)
 ```
 
+## Pregunta 4. Sesgos
 
-## Pregunta 4. Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?
+***Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?***
 
 En el caso de este dataset hay 19 de 22 variables categóricas por lo que no considero que sea buena idea hacer una PCA para estos datos.
 
-## Pregunta 5. ¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?
+En el apartado anterior comento los sesgos que veo a la hora de recoger los datos y del tipo de personas encuestadas en este estudio.
 
-Para el dataset diabetesBRFSS2015, que hemos identificado como adecuado para problemas de clasificación, específicamente para determinar la presencia de diabetes, el algoritmo Naive Bayes puede ser una opción atractiva para empezar el modelado. 
+## Pregunta 5. Elección algoritmo
+
+***¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?***
+
+Para el dataset diabetesBRFSS2015, que hemos identificado como adecuado para problemas de clasificación, específicamente para determinar la presencia de diabetes, el algoritmo Naive Bayes puede ser una opción atractiva para empezar el modelado.
 
 El algoritmo Naive Bayes es un clasificador probabilístico basado en el teorema de Bayes con la "ingenua" suposición de independencia entre las características. Es especialmente popular en tareas de clasificación de texto pero también puede ser efectivo en datasets de salud como este.
 
 Naive Bayes es conocido por ser un modelo simple y rápido para entrenar lo que lo hace atractivo para datasets grandes o para una exploración inicial de los datos. Funciona bien con variables categóricas lo cual es relevante para el dataset diabetesBRFSS2015, que contiene varias de estas variables, aunque también funciona con variables numéricas.
 
-La suposición de independencia entre las características raramente se cumple en la práctica lo que puede afectar la precisión del modelo. Dado que es un modelo probabilístico puede no ser tan preciso en la clasificación cuando las relaciones entre las características son complejas o altamente correlacionadas. 
+La suposición de independencia entre las características raramente se cumple en la práctica lo que puede afectar la precisión del modelo. Dado que es un modelo probabilístico puede no ser tan preciso en la clasificación cuando las relaciones entre las características son complejas o altamente correlacionadas.
 
-A menudo considerado como un punto de partida para la clasificación binaria, la regresión logística puede manejar relaciones lineales entre las características y la variable objetivo, pero puede quedarse corta frente a relaciones más complejas que Naive Bayes podría capturar a través de su enfoque probabilístico. 
+A menudo considerado como un punto de partida para la clasificación binaria, la regresión logística puede manejar relaciones lineales entre las características y la variable objetivo, pero puede quedarse corta frente a relaciones más complejas que Naive Bayes podría capturar a través de su enfoque probabilístico.
 
+## Pregunta 6. Transformación
 
-## Pregunta 6. ¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.
+***¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.***
 
-Aunque el algoritmo Naive Bayes es menos sensible al escalado de características que otros algoritmos, normalizar o estandarizar los datos numéricos puede ser útil para mantener la consistencia en la interpretación de los resultados. 
+El algoritmo Naive Bayes es menos sensible al escalado de características numéricas que otros algoritmos, por lo que no considero modificar los datos.
 
-```{r}
-diabetesBRFSS2015$BMI <- scale(diabetesBRFSS2015$BMI)
-diabetesBRFSS2015$MentHlth <- scale(diabetesBRFSS2015$MentHlth)
-diabetesBRFSS2015$PhysHlth <- scale(diabetesBRFSS2015$PhysHlth)
-```
+## Pregunta 7. Algoritmo
 
-
-## Pregunta 7. Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados
-
+***Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados***
 
 En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de diabetesBRFSS2015 para entrenar el algoritmo de Naive-bayes. Vemos que el porcentaje de paciente sano y diabético en entrenamiento y test se mantienen.
 
@@ -1390,11 +1518,11 @@ table(testSet.diabetes$Diabetes_binary)
 
 Dentro del paquete caret encontramos el modelo naive_bayes y los hiperparámetros específicos que se pueden ajustar dependen del tipo de modelo naive_bayes que se está utilizando. Por lo general, naive_bayes es conocido por su simplicidad y tiene relativamente pocos hiperparámetros en comparación con otros modelos de aprendizaje automático más complejos. Sin embargo, hay algunas variaciones del algoritmo que ofrecen diferentes hiperparámetros para el ajuste, especialmente cuando se trata de modelar la distribución de los datos.
 
-- usekernel: Este hiperparámetro determina si se deben usar kernels para estimar la densidad de probabilidad de las variables numéricas. Es útil cuando se asume que la distribución de los datos no sigue necesariamente una distribución normal. Los valores habituales: TRUE o FALSE. El valor predeterminado suele ser FALSE, lo que significa que no se usan kernels y se asume una distribución normal (Gaussiana) para las variables numéricas. Si se establece en TRUE, se usan kernels para una aproximación más flexible de la distribución de los datos.
+-   [usekernel]{.underline}: Este hiperparámetro determina si se deben usar kernels para estimar la densidad de probabilidad de las variables numéricas. Es útil cuando se asume que la distribución de los datos no sigue necesariamente una distribución normal. Los valores habituales: TRUE o FALSE. El valor predeterminado suele ser FALSE, lo que significa que no se usan kernels y se asume una distribución normal (Gaussiana) para las variables numéricas. Si se establece en TRUE, se usan kernels para una aproximación más flexible de la distribución de los datos.
 
-- laplace: Este hiperparámetro se utiliza cuando usekernel es TRUE. Se refiere al factor de suavizado (factor de Laplace) aplicado a las estimaciones de densidad del kernel para evitar el problema de la probabilidad cero. Los valores habituales son un valor numérico, generalmente pequeño (por ejemplo, 0, 0.01, 0.1). Un valor más grande aumenta el suavizado.
+-   [laplace]{.underline}: Este hiperparámetro se utiliza cuando usekernel es TRUE. Se refiere al factor de suavizado (factor de Laplace) aplicado a las estimaciones de densidad del kernel para evitar el problema de la probabilidad cero. Los valores habituales son un valor numérico, generalmente pequeño (por ejemplo, 0, 0.01, 0.1). Un valor más grande aumenta el suavizado.
 
-- adjust: También relacionado con el uso de kernels (cuando usekernel es TRUE), este hiperparámetro ajusta el ancho de banda del kernel utilizado en la estimación de la densidad. Los valores habituales son un valor numérico mayor que 0. Un valor de 1 significa no ajustar el ancho de banda, valores menores de 1 lo reducen y valores mayores de 1 lo aumentan. Ajustar el ancho de banda puede ayudar a afinar cómo se modela la distribución de las variables numéricas.
+-   [adjust]{.underline}: También relacionado con el uso de kernels (cuando usekernel es TRUE), este hiperparámetro ajusta el ancho de banda del kernel utilizado en la estimación de la densidad. Los valores habituales son un valor numérico mayor que 0. Un valor de 1 significa no ajustar el ancho de banda, valores menores de 1 lo reducen y valores mayores de 1 lo aumentan. Ajustar el ancho de banda puede ayudar a afinar cómo se modela la distribución de las variables numéricas.
 
 ```{r}
 modelLookup(("naive_bayes"))
@@ -1413,9 +1541,12 @@ NBControl.diabetes <- trainControl(method = "repeatedcv",
 ```
 
 En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 68 posibilidades combinatorias:
-- laplace: 0, 0.2, 0.4, 0.6, 0.8, 1
-- usekernel: T, F
-- adjust: 0.2, 0.6, 1, 1.4, 1.8, 2.2
+
+-   laplace: 0, 0.2, 0.4, 0.6, 0.8, 1
+
+-   usekernel: T, F
+
+-   adjust: 0.2, 0.6, 1, 1.4, 1.8, 2.2
 
 ```{r}
 set.seed(1234)
@@ -1472,7 +1603,11 @@ grid.arrange(p1, p2, ncol = 2)
 En la siguiente tabla vemos las variables más importantes para nuestro modelo y vemos que la más importante de todas en considerar tener buena salud, seguida de el indice de masa corporal y la tension vascular alta.
 
 ```{r}
-varImp(myfit.diabetes.cv10.rp3.nb)
+import <- varImp(myfit.diabetes.cv10.rp3.nb)
+import$importance <- round(import$importance[order(-import$importance[,1]),], 2)
+formattable(import$importance, list(
+  area(col= Healthy:Diabetic) ~ color_bar("lightblue")
+  ))
 ```
 
 A continuación, vamos a predecir los resultados de la variable dependiente con el conjunto de test generado anteriormente.
@@ -1484,31 +1619,41 @@ conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binar
 conf.diabetes
 ```
 
-
 La matriz muestra que 5748 individuos fueron correctamente identificados como saludables por el modelo (verdaderos positivos). 4090 individuos saludables fueron incorrectamente clasificados como diabéticos (Falsos negativos). 1321 individuos diabéticos fueron incorrectamente clasificados como saludables (falsos positivos). 2979 individuos fueron correctamente identificados como diabéticos (verdaderos negativos).
 
-- Accuracy: El 61.73% de todas las predicciones fueron correctas. Este valor indica la proporción general de predicciones correctas del modelo.
-- Intervalo de Confianza del 95% para la Precisión: Entre 60.92% y 62.53%, lo que proporciona un rango estimado de precisión del modelo en la población general.
-- Tasa de No Información (No Information Rate): Es el mayor de las proporciones de las clases de referencia, que en este caso es 50%. Este valor se utiliza para comparar la precisión del modelo; una precisión significativamente mayor que la tasa de no información indica un modelo útil.
-- P-value de la Precisión Mayor que la Tasa de No Información: Menor que 2.2e-16, lo que sugiere que el modelo es significativamente mejor que una conjetura al azar.
-- Kappa de Cohen: De 0.2345, reflejando una concordancia débil a moderada más allá de la coincidencia por casualidad.
-- Prueba de McNemar Valor-P: Menor que 2.2e-16, lo que indica una diferencia significativa entre los falsos positivos y los falsos negativos.
+-   [Accuracy]{.underline}: El 61.73% de todas las predicciones fueron correctas. Este valor indica la proporción general de predicciones correctas del modelo.
 
-- Sensibilidad: El 42.14% de los individuos diabéticos reales fueron correctamente identificados, lo que sugiere una capacidad moderadamente baja del modelo para detectar la clase "Diabetic". 
-- Especificidad: El 81.31% de los individuos saludables reales fueron correctamente identificados, indicando una alta capacidad del modelo para detectar la clase "Healthy".
-- Valor Predictivo Positivo :  El 69.28% de los individuos clasificados como diabéticos eran realmente diabéticos.
-- Valor Predictivo Negativo:El 58.43% de los individuos clasificados como saludables eran realmente saludables.
-- Prevalencia de la Clase 'Diabetic': Se asumió un 50%, lo que indica que las clases están balanceadas en el conjunto de datos utilizado para esta matriz de confusión.
-- Tasa de Detección para 'Diabetic'**: El 40.66% del total de individuos fueron correctamente identificados como saludables.
-- Prevalencia de Detección para "Diabetic": El 30% del total de predicciones fueron para la clase 'Diabetic'.
-- Precisión Balanceada: El 61.73%, igual a la precisión general, dado que la prevalencia de las clases es equilibrada.
+-   [Intervalo de Confianza del 95% para la Precisión]{.underline}: Entre 60.92% y 62.53%, lo que proporciona un rango estimado de precisión del modelo en la población general.
 
-Aunque el modelo tiene una buena especificidad para detectar individuos saludables, su sensibilidad y valor predictivo negativos son moderados, lo que indica una capacidad limitada para clasificar correctamente a los individuos sanos y para que las predicciones de la clase 'Diabetic' sean precisas. El coeficiente Kappa muestra una concordancia débil, lo que sugiere que hay margen de mejora en la capacidad del modelo para clasificar las instancias más allá de lo que se esperaría por azar. La prueba de McNemar destaca una discrepancia significativa entre los falsos positivos y falsos negativos, lo que puede indicar un sesgo en cómo el modelo realiza sus predicciones. 
+-   [Tasa de No Información (No Information Rate)]{.underline}: Es el mayor de las proporciones de las clases de referencia, que en este caso es 50%. Este valor se utiliza para comparar la precisión del modelo; una precisión significativamente mayor que la tasa de no información indica un modelo útil.
+
+-   [P-value de la Precisión Mayor que la Tasa de No Información]{.underline}: Menor que 2.2e-16, lo que sugiere que el modelo es significativamente mejor que una conjetura al azar.
+
+-   [Kappa]{.underline}: De 0.2345, reflejando una concordancia débil a moderada más allá de la coincidencia por casualidad.
+
+-   [Prueba de McNemar Valor-P]{.underline}: Menor que 2.2e-16, lo que indica una diferencia significativa entre los falsos positivos y los falsos negativos.
+
+-   [Sensibilidad]{.underline}: El 42.14% de los individuos diabéticos reales fueron correctamente identificados, lo que sugiere una capacidad moderadamente baja del modelo para detectar la clase "Diabetic".
+
+-   [Especificidad]{.underline}: El 81.31% de los individuos saludables reales fueron correctamente identificados, indicando una alta capacidad del modelo para detectar la clase "Healthy".
+
+-   [Valor Predictivo Positivo]{.underline} : El 69.28% de los individuos clasificados como diabéticos eran realmente diabéticos.
+
+-   [Valor Predictivo Negativo]{.underline}: El 58.43% de los individuos clasificados como saludables eran realmente saludables.
+
+-   [Prevalencia de la Clase "Diabetic"]{.underline}: Se asumió un 50%, lo que indica que las clases están balanceadas en el conjunto de datos utilizado para esta matriz de confusión.
+
+-   [Tasa de Detección para "Diabetic"]{.underline}: El 40.66% del total de individuos fueron correctamente identificados como saludables.
+
+-   [Prevalencia de Detección para "Diabetic"]{.underline}: El 30% del total de predicciones fueron para la clase 'Diabetic'.
+
+-   Precisión Balanceada: El 61.73%, igual a la precisión general, dado que la prevalencia de las clases es equilibrada.
+
+Aunque el modelo tiene una buena especificidad para detectar individuos saludables, su sensibilidad y valor predictivo negativos son moderados, lo que indica una capacidad limitada para clasificar correctamente a los individuos sanos y para que las predicciones de la clase "Diabetic" sean precisas. El coeficiente Kappa muestra una concordancia débil, lo que sugiere que hay margen de mejora en la capacidad del modelo para clasificar las instancias más allá de lo que se esperaría por azar. La prueba de McNemar destaca una discrepancia significativa entre los falsos positivos y falsos negativos, lo que puede indicar un sesgo en cómo el modelo realiza sus predicciones.
 
 A continuación muestro la matriz de confusión gráficamente para una mejor interpretación.
 
 ```{r, warning=FALSE}
-
 preds.diabetes <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, newdata = testSet.diabetes)
 
 conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binary)
@@ -1519,7 +1664,7 @@ plot_confusion_matrix(conf.diabetes_tibble,
                       counts_col = "n")
 ```
 
-Vamos a ver a continuación sin este modelo ha incurrido en underfitting.
+Vamos a ver a continuación si este modelo ha incurrido en underfitting.
 
 ```{r, warning=FALSE}
 # Evaluar el rendimiento en el conjunto de entrenamiento
@@ -1533,7 +1678,7 @@ conf_test_diabetes <- confusionMatrix(testPredictions, testSet.diabetes$Diabetes
 conf_train_diabetes$overall
 conf_test_diabetes$overall
 ```
+
 Al calcular el accuracy de los valores predichos con los datos de entrenamiento y el accuracy de los datos de test, observamos que en los datos de entrenamiento la precisión es ligeramente menor que los datos de test indicando que nuestro modelo ha incurrido en underfitting por lo que deberiamos considerar otro modelo o ver alternativas de preprocesamiento.
 
 En resumen, este modelo predice muchos falsos negativos. En casos medicos como este, un falso positivo o falsos negativos pueden incurrir en graves consecuencias.
-
