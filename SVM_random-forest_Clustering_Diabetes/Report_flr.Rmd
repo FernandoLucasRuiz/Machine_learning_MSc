@@ -1,0 +1,984 @@
+---
+title: "Práctica 2 Machine Learning 2023/2024"
+subtitle: "Master en Bioinformática, Universidad de Murcia"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: no
+    theme: spacelab
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Tarea a realizar
+
+En esta práctica se pretende crear unos modelos predictivos utilizando los algoritmos de random forest y máquinas de vectores soporte (SVM) en el dataset de Diabetes en el BRFSS. Además, también emplearemos algoritmos de clusterización para ver si mediante de aprendizaje no supervisado ver si existen subclases de poblaciones dentro de nuestros datos.
+
+## Librerias
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+library(randomForest)
+library(tidyverse)
+library(fastDummies)  # Para realizar el one-hot encoding
+library(pROC)         # Curvas ROC
+library(cvms)         # matriz de confusion
+library(ggrepel)      # para notación en gráficas
+library(umap)         # UMAP
+library(cluster)      # Análisis silhouette
+library(gridExtra)    # Gráficas dobles
+library(pROC)         # Cálculo Área bajo la curva
+
+library(doParallel) # para paralelizar procesos
+num_cores <- detectCores() - 1
+registerDoParallel(cores=num_cores)
+```
+
+## Cargar los datos
+
+Los datos de este dataset se localizan en el archivo csv "diabetesBRFSS2015.csv". Cambio el tipo de variable según sea su tipo, ya que al cargar los datos no se reconoce si son variables categóricas, numéricas o booleanas.
+
+```{r}
+diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
+diabetesBRFSS2015[] <- lapply(diabetesBRFSS2015, as.factor)
+diabetesBRFSS2015$BMI <- as.numeric(diabetesBRFSS2015$BMI)
+diabetesBRFSS2015$MentHlth <- as.numeric(diabetesBRFSS2015$MentHlth)
+diabetesBRFSS2015$PhysHlth <- as.numeric(diabetesBRFSS2015$PhysHlth)
+diabetesBRFSS2015$Diabetes_binary <- factor(diabetesBRFSS2015$Diabetes_binary, levels= c(0,1), labels = c("Healthy", "Diabetic"))
+str(diabetesBRFSS2015)
+```
+
+```{r}
+sum(is.na(diabetesBRFSS2015))
+```
+
+## Partición de los datos
+
+En primer lugar, vamos a generar los datos de entrenamiento y test de los datos de diabetesBRFSS2015 para entrenar el algoritmo de Random Forest. Vemos que el porcentaje de paciente sano y diabético en entrenamiento y test se mantienen.
+
+```{r}
+set.seed(1234)
+diabetes.TrainIdx.80 <- createDataPartition(diabetesBRFSS2015$Diabetes_binary,
+                                       p=0.8, #Genera un 80% para train, 20% para test
+                                       list = FALSE, #Dame los resultados en una matriz
+                                       times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes <- diabetesBRFSS2015[diabetes.TrainIdx.80, ]
+testSet.diabetes <- diabetesBRFSS2015[-diabetes.TrainIdx.80, ]
+
+table(trainSet.diabetes$Diabetes_binary)
+table(testSet.diabetes$Diabetes_binary)
+```
+
+# Random Forest
+
+Es un algoritmo de aprendizaje supervisado utilizado tanto para clasificación como para regresión. Este algoritmo se basa en la idea de combinar múltiples árboles de decisión durante el proceso de entrenamiento para mejorar la precisión y evitar el sobreajuste, problemas comunes cuando se utiliza un solo árbol de decisión. Esto se consigue mediante la selección aleatoria de atributos en cada arbol de decisión. Esto se hace mediante muestreo por reemplazo, por lo que los atributos cambian en cada decisión de cada arbol. Esta estrategia de selección aleatoria de características contribuye a la diversidad entre los árboles y aumenta la robustez del modelo.
+
+Para realizar una predicción, en el caso de la clasificación, cada árbol da un resultado de qué clase ha predicho, y la clase con más votos es la predicción del modelo. Para la regresión, el promedio de las predicciones de todos los árboles es el resultado final.
+
+Los Random Forest son algoritmos muy robustos que son tolerantes al ruido. Para este trabajo vamos a utilizar el paquete "randomForest" de "Caret" y para este paquete no se necesita un preprocesamiento de los datos categóricos por One-hot encoding ya que el propio paquete lo solventa. Tampoco es necesario imputar valores nulos (en nuestro caso no tenemos valores nulos), ya que el propio Random Forest lo solventa.
+
+## Selección hiperparámetros
+
+Este paquete de Random Forest (rf) solamente tiene un hiperparámetro que podemos modificar que es mtry. Representa el número de variables que se deben considerar en cada división de un árbol. Por defecto, este valor se establece como la raíz cuadrada del número total de variables en el caso de la clasificación, y un tercio del número total de variables en el caso de la regresión. Este hiperparámetro es crucial porque controla el grado de aleatoriedad en la construcción de árboles. Un mtry bajo aumenta la diversidad entre los árboles, reduciendo la varianza pero aumentando el sesgo. Un mtry alto hace lo contrario.
+
+También podemos modificar el número de árboles en el bosque (ntree). Este valor determina cuántos árboles individuales se construirán antes de hacer una predicción final basada en la agregación de sus resultados. Generalmente, más árboles mejoran la precisión del modelo hasta cierto punto, pero también incrementan el tiempo de computación y pueden llegar a un punto de rendimientos decrecientes.
+
+Para buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 12 posibilidades combinatorias:
+
+-   mtry: 2, 3, 4, 5
+
+-   trees: 500, 1000, 1500, 2000
+
+Para mtry, según las recomendaciones para modelos clasificatorios habría que probar desde 2 hasta $\sqrt{n\_atributos}$.
+
+```{r}
+modelLookup(("rf"))
+```
+
+## Entrenamiento
+
+Para este modelo he elegido entrenar los datos con validación cruzada sin repetición, ya que la dimensionalidad de estos datos es bastante grande y a nivel computacional es más costoso pero quiero mantener una consistencia en los datos para no incurrir en overfitting o underfitting. Permito el análisis en paralelo para aumentar el rendimiento.
+
+```{r}
+set.seed(1234)
+RFControl.diabetes <- trainControl(method = "cv",
+                           number = 10 ,
+                           returnResamp = "final",
+                           seeds = NULL,
+                           allowParallel = T)
+```
+
+Debido a que mi portatil no soporta esta carga computacional, he decidido realizar un script para que se ejecute por bash y sea gestionado por el gestor de colas SLURM de dayhoff.
+
+En primer lugar genero el Rscript con los datos necesarios que se puede ver en el documento "train_model_rf.R". En el mismo se hace un bucle para que en cada pasada haya un número distinto de arboles en el random forest.
+
+Generamos un shell script de bash llamado modelo "modelo_script_rf.sh" en cual llamamos al script de R para ejecutarlo. Por último, ejecutamos un sbatch del Shell Script en el gestor de colas SLURM.
+
+```{r, eval=FALSE}
+# R Script para generar los modelos de Random Forest para ejecutarlos en dayhoff
+
+library(caret)
+library(tidyverse)
+library(doParallel) # para paralelizar procesos
+num_cores <- detectCores()
+registerDoParallel(cores=num_cores)
+
+diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
+diabetesBRFSS2015[] <- lapply(diabetesBRFSS2015, as.factor)
+diabetesBRFSS2015$BMI <- as.numeric(diabetesBRFSS2015$BMI)
+diabetesBRFSS2015$MentHlth <- as.numeric(diabetesBRFSS2015$MentHlth)
+diabetesBRFSS2015$PhysHlth <- as.numeric(diabetesBRFSS2015$PhysHlth)
+diabetesBRFSS2015$Diabetes_binary <- factor(diabetesBRFSS2015$Diabetes_binary, levels= c(0,1), labels = c("Healthy", "Diabetic"))
+
+
+set.seed(1234)
+diabetes.TrainIdx.80 <- createDataPartition(diabetesBRFSS2015$Diabetes_binary,
+                                            p=0.8, #Genera un 80% para train, 20% para test
+                                            list = FALSE, #Dame los resultados en una matriz
+                                            times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes <- diabetesBRFSS2015[diabetes.TrainIdx.80, ]
+testSet.diabetes <- diabetesBRFSS2015[-diabetes.TrainIdx.80, ]
+
+RFControl.diabetes <- trainControl(method = "cv",
+                                   number = 10 ,
+                                   returnResamp = "final",
+                                   seeds = NULL,
+                                   allowParallel = T)
+
+mygrid.diabetes <- expand.grid(mtry = c(2:round(sqrt(ncol(diabetesBRFSS2015)))))
+trees <- seq(500, 2000, 500)
+
+rf.cv.10 <- list()
+for (tree in trees){
+  modelo <- train(Diabetes_binary~.,data=trainSet.diabetes,
+                  method="rf",
+                  tuneGrid=mygrid.diabetes,
+                  trControl=RFControl.diabetes, 
+                  ntree = tree
+  )
+  rf.cv.10[[paste(tree, "trees")]] <- modelo
+}
+
+saveRDS(rf.cv.10, "rf.cv.10.RDS")
+```
+
+```{bash, eval=FALSE}
+# Shell script para generar los modelos de Random Forest para ejecutarlos en dayhoff.
+
+#!/bin/bash
+
+#SBATCH --job-name=rf_training    # Nombre del trabajo
+#SBATCH --output=rf_%u.%x.%j.out        # Salida estandar (stdout)
+#SBATCH --error=rf_%u.%x.%j.err         # Salida de error (stderr)
+#SBATCH --cpus-per-task=4       #
+#SBATCH --chdir=/home/alumno14/machine_learning
+
+module load R                     
+Rscript /home/alumno14/machine_learning/train_model_rf.R  
+```
+
+
+## Análisis
+
+Una vez tengamos los resultados los cargamos de nuevo para analizarlos.
+
+```{r}
+rf.cv.10 <- readRDS("rf.cv.10.RDS")
+```
+
+Como podemos ver, el modelo con unas métricas mejores contiene 2000 arboles y 5 variables en cada división del arbol.
+
+```{r, fig.height=5, fig.height=5}
+datos_combinados <- rbind(
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, MetricValue = rf.cv.10$`500 trees`$results$Accuracy, Trees = "500 trees", Metric = "Accuracy"),
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, MetricValue = rf.cv.10$`500 trees`$results$Kappa, Trees = "500 trees", Metric = "Kappa"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, MetricValue = rf.cv.10$`1000 trees`$results$Accuracy, Trees = "1000 trees", Metric = "Accuracy"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, MetricValue = rf.cv.10$`1000 trees`$results$Kappa, Trees = "1000 trees", Metric = "Kappa"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, MetricValue = rf.cv.10$`1500 trees`$results$Accuracy, Trees = "1500 trees", Metric = "Accuracy"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, MetricValue = rf.cv.10$`1500 trees`$results$Kappa, Trees = "1500 trees", Metric = "Kappa"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, MetricValue = rf.cv.10$`2000 trees`$results$Accuracy, Trees = "2000 trees", Metric = "Accuracy"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, MetricValue = rf.cv.10$`2000 trees`$results$Kappa, Trees = "2000 trees", Metric = "Kappa")
+)
+
+datos_combinados %>%
+  ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
+  geom_point(size = 4) +
+  geom_line(linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Mtry", y = "Valor de la Métrica", title = "Comparación de Precisión y Kappa del Random Forest") +
+  facet_wrap(~ Metric, scales = "free_y")
+
+```
+
+El "mean decrease Gini" es una métrica utilizada en modelos de Random Forest, basados en árboles de decisión, para evaluar la importancia de las variables. Se calcula a partir de la impureza de Gini, que mide qué tan frecuentemente un elemento sería incorrectamente etiquetado si se etiquetara de forma aleatoria según la distribución de etiquetas en el conjunto. Durante la construcción de los árboles, se selecciona la división que más reduce la impureza de Gini, reflejando la contribución de cada variable a la homogeneidad de los nodos y, por tanto, a la precisión predictiva del modelo. El "mean decrease Gini" para una variable se obtiene como el promedio de todas las reducciones de impureza que la variable produce en todos los árboles del bosque, proporcionando un indicador robusto de su importancia. Variables con altos valores en esta métrica son consideradas cruciales para el modelo, ya que su inclusión reduce significativamente la incertidumbre de las predicciones.
+
+Cuando nos fijamos en las variables mas importantes en nuestro modelo vemos que el indice de masa corporal es el que tiene más impacto seguido de un indice de presión arterial alto.
+
+```{r, fig.height=8, fig.height=8}
+rf.cv.10$`2000 trees`$finalModel$importance %>%
+  as.data.frame() %>%
+  arrange(MeanDecreaseGini) %>%    
+  mutate(name=factor(rownames(.), levels=rownames(.))) %>%   # This trick update the factor levels
+  ggplot( aes(x=name, y=MeanDecreaseGini)) +
+    geom_segment( aes(xend=name, yend=0)) +
+    geom_point( size=4, color="orange") +
+    coord_flip() +
+    theme_bw() +
+    xlab("")
+```
+
+# SVM
+
+Las Máquinas de Vectores de Soporte (SVM, por sus siglas en inglés, Support Vector Machines) son un conjunto de métodos de aprendizaje supervisado utilizados para clasificación, regresión y detección de outliers. A diferencia de modelos como Random Forest que se basan en ensambles de árboles de decisión, las SVM trabajan construyendo un hiperplano o conjunto de hiperplanos en un espacio de alta dimensión que puede ser utilizado para clasificación o regresión. 
+
+Para problemas de clasificación como es el que tenemos en estos datos, SVM intenta encontrar el hiperplano que mejor separa las clases en el espacio de características. El mejor hiperplano es aquel que tiene la mayor distancia a los puntos de datos más cercanos de cada clase, conocidos como vectores de soporte. Por otro lado, los datos lejanos a los hiperplanos no son tomados en cuenta. En problemas de regresión, los SVM intenta encontrar un hiperplano que se ajuste lo mejor posible a los datos dentro de un margen definido, intentando capturar la mayor cantidad de puntos posibles dentro de este margen.
+
+Una de las características más poderosas de SVM es su capacidad de utilizar funciones kernel para transformar el espacio de características a una dimensión más alta donde las clases se pueden separar linealmente, permitiendo a SVM manejar datos que no son linealmente separables en su forma original. Tambien, las SVM son particularmente eficaces en espacios de alta dimensión. A través del uso del kernels, SVM puede adaptarse a diferentes tipos de datos y relaciones funcionales entre las características y las etiquetas.
+
+Por otro lado, elegir la función de kernel adecuada y configurar los parámetros del kernel puede ser complicado y requiere de una selección cuidadosa a través de la experimentación y validación cruzada. SVM tiende a ser menos eficiente a medida que el tamaño del conjunto de datos aumenta, lo que hace que Random Forest sea más adecuado para manejar grandes volúmenes de datos.
+
+## Preprocesamiento
+
+Las SVM necesitan un procesamiento de los datos previo para un mejor desempeño del algoritmo. Para ello hay que scalar los datos numéricos, además hacer un one-hot encoding de las variables categóricas multiclase. Finalmente, escalo todos los datos ya que SVM necesita un escalado previo para una mejor eficiencia.
+
+Guardo los datos procesados para poder ejecutarlos en dayhoff mediante SLURM.
+
+```{r}
+diabetes.processed <- data.frame(matrix(ncol = 0, nrow = nrow(diabetesBRFSS2015)))
+
+for (colname in names(diabetesBRFSS2015)) {
+  if (is.factor(diabetesBRFSS2015[[colname]]) || is.character(diabetesBRFSS2015[[colname]])) {
+    
+    dummy_df <- dummy_cols(diabetesBRFSS2015[colname], remove_selected_columns = TRUE, remove_first_dummy = TRUE)
+    
+    diabetes.processed <- cbind(diabetes.processed, dummy_df) 
+    
+  } else {
+    
+    diabetes.processed[[colname]] <- diabetesBRFSS2015[[colname]]
+  }
+}
+
+diabetes.processed <- data.frame(cbind("Diabetes_binary_Diabetic" = diabetes.processed$Diabetes_binary_Diabetic, scale(diabetes.processed[,-1])))
+
+diabetes.processed$Diabetes_binary_Diabetic <- factor(diabetes.processed$Diabetes_binary_Diabetic, levels= c(0,1), labels = c("Healthy", "Diabetic"))
+
+str(diabetes.processed)
+
+write_csv(x = diabetes.processed, file = "diabetes.processed.csv")
+
+```
+
+## Partición de los datos preprocesados
+
+Vamos a generar los datos de entrenamiento y test de los datos de diabetesBRFSS2015 procesados para entrenar el algoritmo de SVM. Vemos que el porcentaje de paciente sano y diabético en entrenamiento y test se mantienen.
+
+```{r}
+set.seed(1234)
+diabetes.TrainIdx.80.processed <- createDataPartition(diabetes.processed$Diabetes_binary_Diabetic,
+                                       p=0.8, #Genera un 80% para train, 20% para test
+                                       list = FALSE, #Dame los resultados en una matriz
+                                       times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes.processed <- diabetes.processed[diabetes.TrainIdx.80.processed, ]
+testSet.diabetes.processed <- diabetes.processed[-diabetes.TrainIdx.80.processed, ]
+
+table(trainSet.diabetes.processed$Diabetes_binary_Diabetic)
+table(trainSet.diabetes.processed$Diabetes_binary_Diabetic)
+```
+
+## Entrenamiento
+
+Voy a realizar una comparación entre kernels para ver cuál es el que mejor se comporta en nuestros datos, ya que no sé si la relación de mis datos es lineal o no.Para ello voy a utilizar los métodos svmLinear, svmRadial y svmPoly del paquete kernlab que está dentro de Caret.
+
+Para estos modelos he elegido entrenar los datos con validación cruzada sin repetición, ya que la dimensionalidad de estos datos es bastante grande y a nivel computacional es más costoso pero quiero mantener una consistencia en los datos para no incurrir en overfitting o underfitting. Permito el análisis en paralelo para aumentar el rendimiento.
+
+```{r}
+set.seed(1234)
+svm.Control.diabetes <- trainControl(method = "cv",
+                                     number=10,
+                                     returnResamp = "final", 
+                                     seeds = NULL,
+                                     allowParallel = TRUE)
+```
+
+Al igual que el Random Forest, voy a lanzar con SLURM en dayhoff un trocito de código para generar estos modelos. 
+
+### SVM linear
+
+El kernel lineal en SVM es una de las funciones de kernel más simples y se utiliza para aprender clasificadores o regresiones lineales en el espacio de entrada original. Utiliza el producto escalar entre dos puntos en su espacio original para determinar su similitud. El kernel lineal no transforma los datos a un espacio de mayor dimensionalidad. Esto lo hace menos flexible para capturar relaciones no lineales, pero más eficiente en términos de cómputo y menos propenso a sobreajustar cuando las relaciones subyacentes en los datos son, de hecho, lineales. Es particularmente adecuado para datos que ya son linealmente separables o cuando se tiene un número muy alto de características en comparación con las muestras. 
+
+#### Selección de hiperparámetros
+
+Solamente tiene un hiperparámetro a modular que es el coste. El coste controla el compromiso entre clasificar correctamente los puntos de entrenamiento y maximizar el margen de decisión del hiperplano. Es decir, determina la tolerancia al error y la regularización del modelo. Un valor más alto de C pone más énfasis en clasificar todos los puntos de entrenamiento correctamente, lo cual puede llevar a un modelo más complejo y potencialmente sobreajustado. Por el contrario, un valor más bajo de C enfatiza la simplicidad del modelo, lo que puede aumentar el número de errores de clasificación en el conjunto de entrenamiento pero puede mejorar la generalización.
+
+Elijo una combinación de 4 costes para el grid: 0.01, 0.1, 1, 10
+
+```{r}
+modelLookup(("svmLinear"))
+```
+
+```{r, eval=FALSE}
+# R Script para generar los modelos de SVM linear para ejecutarlos en dayhoff
+
+library(caret)
+library(tidyverse)
+library(doParallel) # para paralelizar procesos
+num_cores <- detectCores()
+registerDoParallel(cores=num_cores)
+
+diabetes.processed <- read.csv("diabetes.processed.csv")
+
+diabetes.TrainIdx.80.processed <- createDataPartition(diabetes.processed$Diabetes_binary_Diabetic,
+                                            p=0.8, #Genera un 80% para train, 20% para test
+                                            list = FALSE, #Dame los resultados en una matriz
+                                            times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes.processed <- diabetes.processed[diabetes.TrainIdx.80.processed, ]
+testSet.diabetes.processed <- diabetes.processed[-diabetes.TrainIdx.80.processed, ]
+
+svm.Control.diabetes <- trainControl(method = "cv",
+                                     number = 10 ,
+                                     returnResamp = "final",
+                                     seeds = NULL,
+                                     allowParallel = T)
+
+tuneGrid.svm.linear <- expand.grid(C = c(0.01, 0.1, 1, 10))
+
+svm.linear.model <- train(Diabetes_binary_Diabetic ~ ., data = trainSet.diabetes.processed,
+                          method = "svmLinear",
+                          trControl = svm.Control.diabetes)
+
+saveRDS(svm.linear.model, "svm.linear.model.RDS")
+```
+
+```{bash, eval=FALSE}
+# Shell Script para generar los modelos de SVM linear para ejecutarlos en dayhoff
+
+#!/bin/bash
+
+#SBATCH --job-name=svm_training    # Nombre del trabajo
+#SBATCH --output=svm_%u.%x.%j.out        # Salida estandar (stdout)
+#SBATCH --error=svm_%u.%x.%j.err         # Salida de error (stderr)
+#SBATCH --cpus-per-task=4	#
+#SBATCH --chdir=/home/alumno14/machine_learning
+
+module load R                     
+Rscript /home/alumno14/machine_learning/train_model_svm_linear.R   
+```
+
+### SVM radial
+
+El kernel SVM radial trata con datos que no son linealmente separables. Este kernel transforma los datos a un espacio dimensional más alto donde es posible encontrar un hiperplano que separe mejor las clases. Este kernel es extremadamente útil cuando la relación entre las variables de clase no es lineal, proporcionando una manera poderosa de capturar estructuras complejas en los datos, lo que a menudo resulta en un mejor rendimiento de clasificación comparado con el kernel lineal, especialmente en casos donde las relaciones entre variables son intrincadas y más difíciles de modelar con hiperplanos lineales.
+
+#### Selección de hiperparámetros
+
+Ahora vamos a probar el svm Radial. Al igual que el kernel linear tenemos el parámetro de coste. En este caso podemos modular otro parámetro llamado sigma. Este hiperparámetro controla la escala de la distancia en el espacio de características transformado. Un valor pequeño de sigma significa que el efecto de un punto es más localizado, lo que lleva a fronteras de decisión que pueden ajustarse más estrechamente alrededor de los puntos de datos individuales, aumentando el riesgo de sobreajuste. Por otro lado, un valor grande de sigma extiende la influencia de los puntos de entrenamiento, lo que puede conducir a un modelo más suavizado o generalizado, pero posiblemente a costa de no capturar suficientemente la complejidad de los datos.
+
+Para este kernel he elegido los siguientes hiperparámetros:
+- C: 0.001, 0.01, 0.1, 1, 10
+- sigma: 0.001, 0.01, 0.1, 1, 10
+
+```{r}
+modelLookup(("svmRadial"))
+```
+
+```{r, eval=FALSE}
+# R Script para generar los modelos de SVM linear para ejecutarlos en dayhoff
+
+library(caret)
+library(tidyverse)
+library(doParallel) # para paralelizar procesos
+num_cores <- detectCores()
+registerDoParallel(cores=num_cores)
+
+diabetes.processed <- read.csv("diabetes.processed.csv")
+
+diabetes.TrainIdx.80.processed <- createDataPartition(diabetes.processed$Diabetes_binary_Diabetic,
+                                            p=0.8, #Genera un 80% para train, 20% para test
+                                            list = FALSE, #Dame los resultados en una matriz
+                                            times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes.processed <- diabetes.processed[diabetes.TrainIdx.80.processed, ]
+testSet.diabetes.processed <- diabetes.processed[-diabetes.TrainIdx.80.processed, ]
+
+svm.Control.diabetes <- trainControl(method = "cv",
+                                     number = 10 ,
+                                     returnResamp = "final",
+                                     seeds = NULL,
+                                     allowParallel = T)
+
+tuneGrid.svm.radial <- expand.grid(C = c(0.001, 0.01, 0.1, 1, 10), sigma = c(0.001, 0.01, 0.1, 1, 10))
+
+svm.radial.model <- train(Diabetes_binary_Diabetic ~ ., data = trainSet.diabetes.processed,
+                          method = "svmRadial",
+                          tuneGrid = tuneGrid.svm.radial,
+                          trControl = svm.Control.diabetes)
+
+saveRDS(svm.radial.model, "svm.radial.model.RDS")
+```
+
+```{bash, eval=FALSE}
+# Shell Script para generar los modelos de SVM linear para ejecutarlos en dayhoff
+
+#!/bin/bash
+
+#SBATCH --job-name=svm_training    # Nombre del trabajo
+#SBATCH --output=svm_%u.%x.%j.out        # Salida estandar (stdout)
+#SBATCH --error=svm_%u.%x.%j.err         # Salida de error (stderr)
+#SBATCH --cpus-per-task=4	#
+#SBATCH --chdir=/home/alumno14/machine_learning
+
+module load R                     
+Rscript /home/alumno14/machine_learning/train_model_svm_radial.R   
+```
+
+### SVM polynomial
+
+Finalmente, entrenamos al modelo con un SVM polinomial (svmPoly). Al igual que el kernel Radial, este método es particularmente útil para datos que no son linealmente separables, ya que el kernel polinomial puede mapear los datos originales a un espacio de características de mayor dimensión donde las clases pueden ser separadas más fácilmente por un hiperplano. 
+
+#### Selección de hiperparámetros
+
+Este kernel tiene tres hiperparámetros a modificar:
+
+El degree define el grado del polinomio utilizado. Un grado más alto significa que el kernel será capaz de modelar interacciones más complejas entre las características.Un grado mayor generalmente permite capturar patrones más complejos en los datos, pero también puede hacer que el modelo sea más propenso al sobreajuste, especialmente si no hay suficientes datos de entrenamiento. Por lo general, se empieza con un grado bajo (como 2 o 3) y se incrementa si es necesario, basándose en la validación cruzada.
+
+El scale ajusta la escala de las características antes de aplicar el kernel polinomial. En otras palabras, controla la influencia de las características individuales en la función del kernel.
+
+El coste es común en todos los kernel.
+
+Para este caso no voy a cambiar los hiperparámetros ya que se va a generar una gran cantidad de posibilidades con los hiperparámetros por defecto que lanza el propio Caret.
+
+```{r}
+modelLookup(("svmPoly"))
+```
+
+```{r, eval=FALSE}
+# R Script para generar los modelos de SVM linear para ejecutarlos en dayhoff
+
+library(caret)
+library(tidyverse)
+library(doParallel) # para paralelizar procesos
+num_cores <- detectCores()
+registerDoParallel(cores=num_cores)
+
+diabetes.processed <- read.csv("diabetes.processed.csv")
+
+diabetes.TrainIdx.80.processed <- createDataPartition(diabetes.processed$Diabetes_binary_Diabetic,
+                                            p=0.8, #Genera un 80% para train, 20% para test
+                                            list = FALSE, #Dame los resultados en una matriz
+                                            times = 1) #Genera solamente una partición 80/20
+
+trainSet.diabetes.processed <- diabetes.processed[diabetes.TrainIdx.80.processed, ]
+testSet.diabetes.processed <- diabetes.processed[-diabetes.TrainIdx.80.processed, ]
+
+svm.Control.diabetes <- trainControl(method = "cv",
+                                     number = 10 ,
+                                     returnResamp = "final",
+                                     seeds = NULL,
+                                     allowParallel = T)
+
+svm.poly.model <- train(Diabetes_binary_Diabetic ~ ., data = trainSet.diabetes.processed,
+                        method = "svmPoly",
+                        trControl = svm.Control.diabetes)
+
+
+
+saveRDS(svm.poly.model, "svm.poly.model.RDS")
+```
+
+```{bash, eval=FALSE}
+# Shell Script para generar los modelos de SVM linear para ejecutarlos en dayhoff
+
+#!/bin/bash
+
+#SBATCH --job-name=svm_training    # Nombre del trabajo
+#SBATCH --output=svm_%u.%x.%j.out        # Salida estandar (stdout)
+#SBATCH --error=svm_%u.%x.%j.err         # Salida de error (stderr)
+#SBATCH --cpus-per-task=4	#
+#SBATCH --chdir=/home/alumno14/machine_learning
+
+module load R                     
+Rscript /home/alumno14/machine_learning/train_model_svm_poly.R 
+```
+
+## Análisis
+
+Cargo los datos de los modelos ejecutados en dayhoff.
+
+```{r}
+svm.linear.model <- readRDS("svm.linear.model.RDS")
+svm.radial.model <- readRDS("svm.radial.model.RDS")
+svm.poly.model <- readRDS("svm.poly.model.RDS")
+```
+
+Para el modelo lineal el mejor modelo encontrado es con un coste de 0.1.
+
+```{r}
+svm.linear.model$bestTune
+```
+```{r}
+ggplot(svm.linear.model$results, aes(x = C, y = Accuracy)) +
+  scale_x_log10()+
+  theme_minimal()+ 
+  geom_point(size= 3) +
+  geom_line(linetype = "dashed") +
+  labs(x = "Cost", y = "Accuracy", title = "SVM radial", color = "Cost")
+```
+
+El mejor modelo encontrado en el SVM Radial es con un coste de 10 y un sigma de 0.001. Lo podemos ver también en la gráfica. Con un valor de Sigma bajo se comporta mejor que con los altos. 
+
+```{r}
+svm.radial.model$bestTune
+```
+
+```{r}
+ggplot(svm.radial.model$results, aes(x = sigma, y = Accuracy, color = as.factor(C))) +
+  scale_x_log10()+
+  theme_minimal()+ 
+  geom_point(size= 3) +
+  geom_line(linetype = "dashed") +
+  labs(x = "Sigma", y = "Accuracy", title = "SVM radial", color = "Cost")
+```
+
+Para el kernel polinomial, los mejores hiperparámetros son 2 grados, escala 0.01 y coste de 0.25. 
+
+```{r}
+svm.poly.model$bestTune
+```
+
+```{r}
+ggplot(svm.poly.model$results, aes(x = degree, y = Accuracy, color = as.factor(scale))) +
+  facet_wrap(~C) +
+  theme_minimal()+ 
+  geom_point(size= 3) +
+  geom_line(linetype = "dashed") +
+  labs(x = "Degree", y = "Accuracy", title = "SVM polinomial", color = "Scale")
+```
+
+# Comparación de modelos
+
+Primero, para comparar los modelos hay que juntar todos los modelos mediante la función de Caret resamples(). A simple vista en los valores numéricos no se aprecia una gran diferencia entre las métricas de Accuracy y Kappa de los modelos.
+
+```{r}
+models <- list(RF=rf.cv.10$`2000 trees`, 
+               svm.linear=svm.linear.model, 
+               svm.radial = svm.radial.model, 
+               svm.poly = svm.poly.model)
+models.resample <- resamples(models)
+summary(models.resample)
+```
+
+Tampoco observamos una diferencia clara entre los modelos mediante la visualización de los boxplots. Como vemos, no existe una diferencia entre los modelos, dejando ver un poco que el Random Forest es el que se comporta un poco peor que los demás.
+
+```{r}
+p1 <- bwplot(models.resample, main="bwplot", xlim= c(0.7, 0.8), metric = "Accuracy")
+
+p2 <- bwplot(models.resample, main="bwplot", xlim= c(0.45, 0.55), metric = "Kappa")
+
+grid.arrange(p1, p2, ncol= 2)
+```
+
+El siguiente paso es ver si hay diferencia significativa entre los modelos para ver si alguno se comporta mejor que otros. Como vemos en la diagonal inferior tanto en Kappa como en Accuracy no hay difernencia significativa entre los modelos por lo que no rechazamos la hipótesis nula.
+
+```{r}
+comparacion <- diff(models.resample, adjustment = "none", metric = c("Accuracy", "Kappa"))
+summary(comparacion)
+```
+
+Vamos a ver si algún modelo se comporta mejor en Specificity o Sensitivity. Para ello calculo en cada modelo estos parámetros. 
+
+Debido a que no hice one-hot encoding con el modelo de Random Forest tengo que hacerlo ahora para la predicción del modelo ya que el propio modelo hace un one-hot encoding internamente.
+
+```{r, warning=FALSE}
+dummys <- trainSet.diabetes %>%
+  select_if(is.factor) %>%
+  dummy_columns(remove_selected_columns = TRUE, remove_first_dummy = TRUE)
+
+colnames(dummys) <- gsub("_", "", colnames(dummys))
+
+trainSet.diabetes.dummy <- trainSet.diabetes %>% 
+  select(-is.factor) %>%
+  cbind(dummys)
+
+trainSet.diabetes.dummy$DiabetesbinaryDiabetic <- factor(trainSet.diabetes.dummy$DiabetesbinaryDiabetic, levels= c(0,1), labels = c("Healthy", "Diabetic"))
+```
+Aunque las diferencias no son muy grandes, podemos ver que los modelos con una mejor sensibilidad tienen peor especificidad. No podemos llegar a la conclusión de que un modelo sea mejor que otro según las métricas de Accuracy, Kappa, Sensitivity y Specificity.
+
+```{r, warning=FALSE}
+predict.rf.model <- predict(object = rf.cv.10$`2000 trees`$finalModel, data = trainSet.diabetes)
+
+predict.svm.linear.model <- predict(svm.linear.model, data = trainSet.diabetes)
+
+predict.svm.radial.model <- predict(svm.radial.model, data = trainSet.diabetes)
+
+predict.svm.poly.model <- predict(svm.poly.model, data = trainSet.diabetes)
+
+conf.rf <- confusionMatrix(predict.rf.model, trainSet.diabetes.dummy$DiabetesbinaryDiabetic, positive = "Diabetic")
+
+conf.svm.linear.model <- confusionMatrix(predict.svm.linear.model, as.factor(trainSet.diabetes.processed$Diabetes_binary_Diabetic), positive = "Diabetic")
+
+conf.svm.radial.model <- confusionMatrix(predict.svm.radial.model, as.factor(trainSet.diabetes.processed$Diabetes_binary_Diabetic), positive = "Diabetic")
+
+conf.svm.poly.model <- confusionMatrix(predict.svm.poly.model, as.factor(trainSet.diabetes.processed$Diabetes_binary_Diabetic), positive = "Diabetic")
+
+df.sens.spec <- data.frame(Sensitivity = c(conf.rf$byClass['Sensitivity'], conf.svm.linear.model$byClass['Sensitivity'],conf.svm.radial.model$byClass['Sensitivity'],conf.svm.poly.model$byClass['Sensitivity']),
+           Specificity = c(conf.rf$byClass['Specificity'], conf.svm.linear.model$byClass['Specificity'], conf.svm.radial.model$byClass['Specificity'], conf.svm.poly.model$byClass['Specificity']),
+           Model = c("RF", "SVM linear", "SVM Radial", "SVM Polinomial")
+           )
+
+df.long <- tidyr::pivot_longer(df.sens.spec, 
+                               cols = c("Sensitivity", "Specificity"), 
+                               names_to = "Metric", 
+                               values_to = "Value")
+
+
+ggplot(df.long, aes(x = Model, y = Value, color = Metric)) +
+  geom_point(size = 3) +  
+  scale_color_manual(values = c("Sensitivity" = "red", "Specificity" = "blue"),
+                     labels = c("Sensitivity" = "Sensitivity", "Specificity" = "Specificity")) +
+  labs(x = "Model", y = "Value", title = "Sensitivity and Specificity in train data",
+       color = "Metric") +  
+  theme_minimal() + 
+  theme(legend.position = "right") 
+```
+La curva ROC es una herramienta gráfica crucial utilizada para evaluar la capacidad predictiva de un modelo de clasificación a lo largo de varios umbrales de decisión. Esta curva traza la tasa de verdaderos positivos (Sensibilidad) contra la tasa de falsos positivos (1 - Especificidad) para diferentes umbrales de clasificación, proporcionando una representación visual de la relación entre ambos. El AUC es una métrica integral derivada de la curva ROC, que mide la capacidad total del modelo para discriminar entre las clases positivas y negativas. Un AUC de 1.0 representa un modelo perfecto que clasifica correctamente todas las positivas y negativas, mientras que un AUC de 0.5 indica un rendimiento no mejor que el azar.
+
+Vamos a ver cual es el mejor modelo utilizando la métrica de area bajo la curva ya que es un problema de clasificación. Para ello lanzo en dayhoff mediante el gestor de colas SLURM los modelos de Random Forest y los 3 SVM con los mejores hiperparámetros. Incluyo en la función trainControl: 
+- summaryFunction = twoClassSummary,
+- classProbs=TRUE
+
+Tambien añado en la función train:
+- metric = "ROC"
+
+```{r}
+rf.cv.10.modelo.probs <- readRDS("rf.cv.10.modelo.probs.RDS")
+svm.linear.model.probs <- readRDS("svm.linear.model.probs.RDS")
+svm.radial.model.probs <- readRDS("svm.radial.model.probs.RDS")
+svm.poly.model.probs <- readRDS("svm.poly.model.probs.RDS")
+```
+
+Vemos que las AUC de las 4 curvas ROC son extremadamente parecidas. Los kernels no lineales tienen un poco mejor de AUC que los demás.
+
+```{r, message=FALSE}
+predictions_rf <- predict(rf.cv.10.modelo.probs, testSet.diabetes, type = "prob")[,2]
+predictions_svm_linear <- predict(svm.linear.model.probs, testSet.diabetes.processed, type = "prob")[,1]
+predictions_svm_radial <- predict(svm.radial.model.probs, testSet.diabetes.processed, type = "prob")[,1]
+predictions_svm_poly <- predict(svm.poly.model.probs, testSet.diabetes.processed, type = "prob")[,1]
+
+# Calcular las curvas ROC
+roc_rf <- roc(testSet.diabetes$Diabetes_binary, predictions_rf)
+roc_svm_linear <- roc(testSet.diabetes.processed$Diabetes_binary_Diabetic, predictions_svm_linear)
+roc_svm_radial <- roc(testSet.diabetes.processed$Diabetes_binary_Diabetic[], predictions_svm_radial)
+roc_svm_poly <- roc(testSet.diabetes.processed$Diabetes_binary_Diabetic, predictions_svm_poly)
+
+# Áreas bajo la curva
+auc_rf <- auc(roc_rf)
+auc_svm_linear <- auc(roc_svm_linear)
+auc_svm_radial <- auc(roc_svm_radial)
+auc_svm_poly <- auc(roc_svm_poly)
+```
+
+```{r, fig.height=5, fig.width=7, warning=FALSE}
+# Convertir a data frames para ggplot
+df_rf <- data.frame(TPR = roc_rf$sensitivities, FPR =  roc_rf$specificities, Model = 'Random Forest')
+df_svm_linear <- data.frame(TPR = roc_svm_linear$sensitivities, FPR =  roc_svm_linear$specificities, Model = 'SVM Linear')
+df_svm_radial <- data.frame(TPR = roc_svm_radial$sensitivities, FPR =  roc_svm_radial$specificities, Model = 'SVM Radial')
+df_svm_poly <- data.frame(TPR = roc_svm_poly$sensitivities, FPR =  roc_svm_poly$specificities, Model = 'SVM Poly')
+
+# Combining data
+roc_data <- rbind(df_rf, df_svm_linear, df_svm_radial, df_svm_poly)
+
+# Poner las AUC en su gráfica con facet_wrap
+roc_data$AUC <- case_when(
+  roc_data$Model == "Random Forest" ~ sprintf("AUC RF: %.2f", auc_rf),
+  roc_data$Model == "SVM Linear" ~ sprintf("AUC SVM Linear: %.2f", auc_svm_linear),
+  roc_data$Model == "SVM Radial" ~ sprintf("AUC SVM Radial: %.2f", auc_svm_radial),
+  roc_data$Model == "SVM Poly" ~ sprintf("AUC SVM Poly: %.2f", auc_svm_poly)
+)
+
+# Generamos el gráfico
+ggplot(roc_data, aes(x = 1 - FPR, y = TPR, color = Model, group = Model)) +
+  geom_line(size = 0.5) +  
+  scale_color_manual(values = c("Random Forest" = "#377eb8", 
+                                "SVM Linear" = "#4daf4a",
+                                "SVM Radial" = "#ff7f00",
+                                "SVM Poly" = "#984ea3")) +
+  labs(title = "Comparative ROC Curves",
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)") +
+  theme_minimal() +
+  theme(legend.position = "right") +
+  geom_text(aes(x = 0.3, y = 0.2, label = AUC), hjust = 0, vjust = 0) +
+  facet_wrap(~Model)
+
+```
+
+## Predicción de modelos con los datos de test
+
+Finalmente, voy a comprobar la capacidad de predicción de los datos de test para ver la eficacia de cada modelo.
+
+Cuando intento predecir los valores con los datos de test para el Random Forest me devuelve un error diciendo que el dataset de test no tienen el mismo número de variables que el modelo.
+
+Si nos fijamos en el nombre de las variables vemos que se han generado variables nuevas debido a que el algoritmo ha realizado internamente un one-hot encoding de las variables categoricas con varias clases.
+
+```{r}
+rownames(rf.cv.10$`2000 trees`$finalModel$importance)
+```
+
+Por tanto, ahora realizamos el one-hot encoding del dataset de los datos para el test.
+
+```{r, warning=FALSE}
+dummys <- testSet.diabetes %>%
+  select_if(is.factor) %>%
+  dummy_columns(remove_selected_columns = TRUE, remove_first_dummy = TRUE)
+
+colnames(dummys) <- gsub("_", "", colnames(dummys))
+
+testSet.diabetes.dummy <- testSet.diabetes %>% 
+  select(-is.factor) %>%
+  cbind(dummys)
+
+testSet.diabetes.dummy$DiabetesbinaryDiabetic <- factor(testSet.diabetes.dummy$DiabetesbinaryDiabetic, levels= c(0,1), labels = c("Healthy", "Diabetic"))
+
+colnames(testSet.diabetes.dummy)
+```
+
+Ahora sí puedo predecir los datos del conjunto de test y generar las métricas para ver si el modelo predice los resultados de manera correcta. Generamos las matrices de confusión de los 4 modelos para analizar conjuntamente las métricas.
+
+```{r, warning=FALSE}
+predict.rf.model <- predict(object = rf.cv.10$`2000 trees`$finalModel, newdata= testSet.diabetes.dummy)
+
+conf.rf.model <- confusionMatrix(predict.rf.model, testSet.diabetes.dummy$DiabetesbinaryDiabetic, positive = "Diabetic")
+
+predict.svm.linear.model <- predict(svm.linear.model, newdata = testSet.diabetes.processed)
+
+conf.svm.linear.model.test <- confusionMatrix(predict.svm.linear.model, as.factor(testSet.diabetes.processed$Diabetes_binary_Diabetic), positive = "Diabetic")
+
+predict.svm.radial.model <- predict(svm.radial.model, newdata = testSet.diabetes.processed)
+
+conf.svm.radial.model.test <- confusionMatrix(predict.svm.radial.model, as.factor(testSet.diabetes.processed$Diabetes_binary_Diabetic), positive = "Diabetic")
+
+predict.svm.poly.model <- predict(svm.poly.model, newdata = testSet.diabetes.processed)
+
+conf.svm.poly.model.test <- confusionMatrix(predict.svm.poly.model, as.factor(testSet.diabetes.processed$Diabetes_binary_Diabetic), positive = "Diabetic")
+```
+
+Genero el dataframe para visualizar las métricas predictivas.
+
+```{r}
+df.testdata.metrics <- data.frame(Accuracy = c(conf.rf.model$overall['Accuracy'], conf.svm.linear.model.test$overall['Accuracy'],conf.svm.radial.model.test$overall['Accuracy'],conf.svm.poly.model.test$overall['Accuracy']),
+                          
+                          Kappa = c(conf.rf.model$overall['Kappa'], conf.svm.linear.model.test$overall['Kappa'],conf.svm.radial.model.test$overall['Kappa'],conf.svm.poly.model.test$overall['Kappa']),
+                          
+                          Sensitivity = c(conf.rf.model$byClass['Sensitivity'], conf.svm.linear.model.test$byClass['Sensitivity'],conf.svm.radial.model.test$byClass['Sensitivity'],conf.svm.poly.model.test$byClass['Sensitivity']),
+                          Specificity = c(conf.rf.model$byClass['Specificity'], conf.svm.linear.model.test$byClass['Specificity'], conf.svm.radial.model.test$byClass['Specificity'], conf.svm.poly.model.test$byClass['Specificity']),
+                          
+                          Model = c("RF", "SVM linear", "SVM Radial", "SVM Polinomial")
+           )
+```
+
+Como vemos en la gráfica los 4 modelos se comportan de manera similar con unos buenas métricas predictivas (Accuracy ≈ 0.75, Kappa ≈ 0.5, Sensitivity ≈ 0.8 y Specificity ≈ 0.7). Aunque los 4 modelos tienen métricas parecidas, la sensibilidad en datos médicos es crucial ya que es la habilidad de modelo para predecir un individuo como enfermo. En el caso de la especificidad, aquí no es tan importante ya que la predicción es si un individuo sano es sano. 
+
+Por tanto, con estos modelos yo elegiría el SVM polinomial o Radial ya que tienen una mayor sensibilidad con respecto a los otros dos modelos.
+
+```{r}
+df.long <- tidyr::pivot_longer(df.testdata.metrics, 
+                               cols = c("Accuracy", "Kappa","Sensitivity", "Specificity"), 
+                               names_to = "Metric", 
+                               values_to = "Value")
+
+
+ggplot(df.long, aes(x = Model, y = Value, color = Metric)) +
+  geom_point(size = 3) +  
+  scale_color_manual(values = c("Accuracy" = "#17becf", "Kappa" =  "#ff7f0e" ,"Sensitivity" = "#2ca02c", "Specificity" = "#9467bd"),
+                     labels = c("Sensitivity" = "Sensitivity", "Specificity" = "Specificity")) +
+  labs(x = "Model", y = "Value", title = "Metrics in test predictions",
+       color = "Metric") +  
+  theme_minimal() + 
+  theme(legend.position = "right") 
+```
+
+# Análisis no supervisado
+
+El algoritmo de k-means es un método de clustering o agrupamiento que se utiliza para dividir un conjunto de datos en grupos o clusters distintos. Su objetivo es agrupar los datos de tal manera que los puntos dentro de cada cluster sean lo más similares posible entre sí, mientras que los puntos en diferentes clusters sean lo más diferentes posible. La "similitud" generalmente se mide en términos de distancia euclidiana entre puntos en el espacio de características de los datos.
+
+Inicialmente, se seleccionan puntos del conjunto de datos como los centroides iniciales de los clusters. Esta selección puede ser aleatoria o basada en algún criterio específico. Luego, se asigna cada punto del conjunto de datos al cluster cuyo centroide sea el más cercano, donde la "cercanía" se determina generalmente por la distancia euclidiana entre el punto y el centroide. Una vez que todos los puntos han sido asignados a algún cluster, se recalcula la posición de cada centroide como el promedio de todos los puntos que han sido asignados a ese cluster.
+
+El proceso se repite, alternando entre la asignación de puntos a clusters y la actualización de centroides, hasta que los centroides ya no cambien significativamente entre iteraciones, lo que indica que el algoritmo ha convergido.
+
+Para este conjunto de datos voy a realizar una reducción de la dimensionalidad de los datos mediante UMAP. El UMAP Es una técnica de reducción de dimensionalidad que se puede utilizar tanto para visualización como para mejorar el rendimiento en tareas de machine learning. 
+
+## UMAP
+
+Como el número de muestras es muy grande, he decidido poner un número de vecinos de 50 para el análisis de la distancia euclidiana.
+
+```{r, eval=FALSE}
+local.config <- umap.defaults
+local.config$n_components <- 2
+local.config$n_neighbors <- 50
+local.config$metric<- "euclidean"
+set.seed(1234)
+
+diabetes.umap <- umap(diabetes.processed[,-1],random_stage=1234, local.config)
+
+saveRDS(diabetes.umap, "diabetes.umap.RDS")
+```
+
+Como se observa en la representación de UMAP, se forman diversos subgrupos de individuos dentro del conjunto de datos analizado.
+
+```{r}
+diabetes.umap <- readRDS("diabetes.umap.RDS")
+umap.data <- as.data.frame(diabetes.umap$layout)
+
+ggplot(umap.data, aes(x=V1, y=V2)) +  
+  geom_point(size=2,  alpha = 0.01) +
+  guides(colour=guide_legend(override.aes=list(size=6))) +
+  xlab("") + ylab("") +
+  ggtitle("UMAP") +
+  theme_light(base_size=20) +
+  scale_colour_brewer(palette = "Set2")
+```
+
+## Determinación de número de clusters
+
+Determinar el número correcto de clusters (k) es crucial para obtener resultados significativos, y se requiere métodos adicionales como el método del codo o el indice silhouette. Voy a hacer una partición de los datos debido alto coste computacional y que me da error al calcular el indice silhouette ya que no soporta tamaños tan grandes. 
+
+Para tener una correcta distribución de sanos y diabéticos, junto los datos de las variables junto con los datos obtenidos del UMAP. De esta forma puedo hacer la partición de los datos sin desbalance entre clases de salida. Hago una partición del 70% de los datos.
+
+```{r}
+diabetes.processed.umap <- diabetes.processed %>% 
+  mutate(umap1 = diabetes.umap$layout[,1], umap2 = diabetes.umap$layout[,2])
+
+set.seed(1234)
+
+diabetes.clustering.umap <- createDataPartition(diabetes.processed.umap$Diabetes_binary_Diabetic,
+                                       p=0.7, 
+                                       list = FALSE, 
+                                       times = 1) 
+
+data.clustering.diabetes.umap <- diabetes.processed.umap[diabetes.clustering.umap, ]
+table(data.clustering.diabetes.umap[,1])
+```
+
+La regla del codo es una técnica heurística utilizada para determinar el número óptimo de clusters en métodos de clustering como k-means. La idea básica detrás de la regla del codo es identificar el punto en el cual añadir más clusters no proporciona un beneficio significativo en términos de la suma de los cuadrados dentro de los clusters. 
+
+Para ello realizo un bucle en el cual se realizan kmeans con distintos k clusters. Se recogen los "tot.withinss" de cada pasada de kmeans con un k distinto. Esto datos representa la "suma total de cuadrados dentro de los grupos" (Total Within-Cluster Sum of Squares). Es la suma de las distancias al cuadrado entre cada punto de datos y el centroide de su cluster. En otras palabras, es una medida de la variabilidad interna de los clusters. Para un cluster individual, se calcula como la suma de las distancias al cuadrado de todos los puntos dentro del cluster hasta el centroide del cluster.
+
+```{r, warning=FALSE, fig.size = 5, fig.height=5}
+set.seed(1234) 
+
+buscandoK <- data.frame(k = "", tot.withinss = "")
+
+for (k in 2:20) {
+  diabetes.kmeans <- kmeans(data.clustering.diabetes.umap[,c("umap1", "umap2")], centers=k, iter.max=100, nstart = 25)
+
+  buscandoK <- rbind(buscandoK, c(k, diabetes.kmeans$tot.withinss))
+}
+
+buscandoK$tot.withinss <- as.numeric(buscandoK$tot.withinss)
+buscandoK$k <- as.numeric(buscandoK$k)
+buscandoK <- buscandoK[-1,]
+
+ggplot(buscandoK, aes(x =k , y = tot.withinss))+
+  geom_point(color = "#79CDCD", size = 3) +
+  geom_line(size = 1, color = "#79CDCD") +
+  theme_minimal()
+```
+
+Otro método para predecir el mejor k cluster en kmeans es el índice Silhouette que proporciona una medida de lo bien que está cada objeto asignado a su cluster. Se escoge el k que preste el indice Silhouette mayor. En este caso es 19 clusters. 
+
+```{r, eval=FALSE}
+set.seed(1234) 
+buscandoSIL <- data.frame(k = "", median = "")
+
+for (k in 2:20) {
+
+diabetes.kmeans <- kmeans(data.clustering.diabetes.umap[,c("umap1", "umap2")], centers = k, iter.max = 100, nstart = 25)
+  
+  dist_matrix <- dist(data.clustering.diabetes.umap[,c("umap1", "umap2")])
+  
+  sil_k <- silhouette(diabetes.kmeans$cluster, dist_matrix)
+  summ_sil_k <- summary(sil_k)
+  
+  buscandoSIL <- rbind(buscandoSIL, c(k, summ_sil_k$avg.width))
+}
+
+saveRDS(buscandoSIL, "buscandoSIL.RDS")
+```
+
+```{r}
+buscandoSIL <- readRDS("buscandoSIL.RDS")
+
+buscandoSIL$median <- as.numeric(buscandoSIL$median)
+buscandoSIL$k <- as.numeric(buscandoSIL$k)
+buscandoSIL <- buscandoSIL[-1,]
+
+ggplot(buscandoSIL, aes(x =k , y = median))+
+  geom_point(color = "#79CDCD", size = 3) +
+  geom_line(size = 1, color = "#79CDCD") +
+  theme_minimal()+ 
+  labs(y = "Silhouette width")
+```
+
+## K-means
+
+Ahora aplicaremos el método k-means a los datos procesados con UMAP, utilizando hiperparámetros optimizados para afinar más precisamente la identificación de los clusters. Para el número de clusters he elegido el expuesto en el análisis de silhouette ya que la regla del codo es dificil de apreciarlo. Por lo tanto, utilizo 19 centros.
+
+```{r, warning=FALSE}
+set.seed(1234)
+km.umap <- kmeans(diabetes.processed.umap[,c("umap1", "umap2")], nstart = 50, iter.max = 300, centers = 19)
+
+diabetes.processed.umap$kmeans <- factor(km.umap$cluster)
+km.cent <- diabetes.processed.umap %>% 
+  group_by(kmeans) %>% 
+  select(umap1, umap2) %>% 
+  summarize_all(mean)
+```
+
+Como vemos en la figura, se diferencian bien los grupos, aunque se debería afinar con otros métodos de clusterización.
+
+```{r, warning=FALSE}
+ggplot(diabetes.processed.umap, aes(x = umap1, y = umap2, colour = kmeans)) + 
+  geom_point(alpha = 0.3) + 
+  theme_bw()  + 
+  geom_label_repel(aes(label = kmeans), data = km.cent, nudge_x = 0.2, color = "black", ) + 
+  guides(colour = FALSE)+ 
+  labs(title = "UMAP Projection with K-means Clustering")
+```
+
+Por último, voy a buscar los clusters más interesantes para estudiar. Para ello calculo los números totales de diabéticos y sanos de cada cluster para ver cual de ellos tiene un mayor número de diabéticos o de sanos, para ver qué variables son las que más definen esos clusters.
+
+Como vemos el cluster número 13 contiene más del doble de individuos diabéticos que sanos por lo que se esperaria que esos individuos tengan unas características propensas para tener la enfermedad. En cambio, el cluster 14 tiene un porcentaje muy bajo de diabéticos, lo que cabe esperar que sean individuos con una vida saludable.
+
+```{r, fig.height=5, fig.width=5}
+cluster_summary <- diabetes.processed.umap %>%
+  group_by(kmeans, Diabetes_binary_Diabetic) %>%
+  summarize(n = n(), .groups = 'drop') %>%
+  pivot_wider(names_from = Diabetes_binary_Diabetic, values_from = n, values_fill = list(n = 0)) %>%
+  mutate(Proportion = Diabetic / Healthy) %>%
+  arrange(desc(Proportion))
+
+cluster_summary$kmeans <- factor(cluster_summary$kmeans, levels = unique(cluster_summary$kmeans))
+
+ggplot(cluster_summary, aes(x = factor(kmeans), y = Proportion, fill = factor(kmeans))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Diabetics vs Healthy per Cluster",
+       x = "Cluster",
+       y = "Diabetics vs Healthy",
+       fill = "Cluster") +
+  scale_fill_viridis_d()+
+  theme_minimal() +
+  geom_hline(yintercept = 1) +
+  annotate("text", x = 8, y = 1.8, label = "Diabetic", color = "#8B1A1A", size = 8) +
+  annotate("text", x = 16, y = 0.8, label = "Healthy", color = "#1A8B1A", size = 8) 
+```
