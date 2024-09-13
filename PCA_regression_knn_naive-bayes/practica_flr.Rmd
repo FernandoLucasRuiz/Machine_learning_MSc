@@ -17,149 +17,142 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Tarea a realizar
+# Task to perform
 
-En esta práctica se pretende analizar 3 datasets (BostonHousingData, LetterRecognition, Diabetes en el BRFSS). En cada uno de ellos vamos a responder una serie de preguntas. Se pone en práctica desde la asociación de variables pasando por PCA, el uso de algoritmos básicos como regresión lineal, logística, knn y naive bayes, y preproceso en tres datasets diferentes.
+In this practice, we aim to analyze 3 datasets (BostonHousingData, LetterRecognition, and Diabetes in the BRFSS). In each of them, we will answer a series of questions. We will practice everything from variable association to PCA, the use of basic algorithms such as linear regression, logistic regression, KNN, and Naive Bayes, and preprocessing in three different datasets.
 
-En primer lugar vamos a responder las preguntas del primer dataset BostonHousingData.
+First, we will answer the questions of the first dataset, BostonHousingData.
 
-## Librerias
+## Libraries
 
 ```{r, message=FALSE, warning=FALSE}
-library(tidyverse)
-library(gridExtra)
-library(viridis)  # Para la paleta de colores viridis
-library(caret)
-library(kknn)
-library(naivebayes)
-library(pheatmap) # heatmap 
-library(REdaS) # Para test esfericidad de Bartlett
-library(factoextra) #Gráficas PCA
-library(REdaS) # Análisis PCA
-library(plotly) # Gráficas PCA 3D
-library(fastDummies) # codificación variables dummy
-library(cvms) # matriz de confusion
-library(formattable) # tablas
+library(tidyverse)  
+library(gridExtra)  
+library(viridis)  # For the viridis color palette  
+library(caret)  
+library(kknn)  
+library(naivebayes)  
+library(pheatmap)  # heatmap  
+library(REdaS)  # For Bartlett’s Sphericity Test  
+library(factoextra)  # PCA Graphics  
+library(REdaS)  # PCA Analysis  
+library(plotly)  # 3D PCA Graphics  
+library(fastDummies)  # dummy variable encoding  
+library(cvms)  # confusion matrix  
+library(formattable)  # tables  
 
-library(doParallel) # para paralelizar procesos
-num_cores <- detectCores()
-registerDoParallel(cores=num_cores)
+library(doParallel)  # for parallelizing processes  
+num_cores <- detectCores()  
+registerDoParallel(cores=num_cores)  
 ```
 
 # BostonHousingData
 
-Los datos de este dataset se localizan en el paquete R mlbench.
+The data in this dataset is found in the R package mlbench.
 
 ```{r}
 library(mlbench)
 data(BostonHousing)
 ```
 
-## Pregunta 1. Tamaño y tipo
-
-***¿Qué tamaño tiene? ¿De qué tipo son las variables?***
+## Size and type
 
 ```{r}
 str(BostonHousing)
 ```
 
-El dataset contiene 506 filas y 14 variables.
+The dataset contains 506 rows and 14 variables.
 
-Todas las variables son de tipo numérico excepto la variable "chas" o Charles River dummy variable.
+All variables are numeric except the variable "chas" or Charles River dummy variable.
 
-Un primer vistazo a los datos numéricos para ver si tiene nulos, ver la distribución, buscar de variables categóricas, etc.
+Let’s take a first look at the numeric data to check for nulls, view distributions, search for categorical variables, etc.
 
 ```{r}
 Hmisc::describe(BostonHousing)
 ```
 
-No tiene valores nulos y tienen distribuciones dispares entre variables.
+There are no missing values, and the variables have disparate distributions.
 
-## Pregunta 2. Representación ejemplos
+## Representation
 
-***Explica qué representan los ejemplos***
+This dataset includes information on different areas of Boston, detailed through various parameters. Each record in this dataset represents an area of Boston, with characteristics that influence the estimation of the median value of homes in that area. The dependent variable is "medv," which refers to the median value of homes inhabited by their owners in thousands of dollars.
 
-Este dataset incluye información sobre diferentes zonas de Boston, detalladas a través de varios parámetros. Cada registro en este dataset representa una zona de Boston, con características que influyen en la estimación del valor medio de las viviendas en esa zona. La variable dependiente es "medv", que se refiere al valor medio de las casas habitadas por sus propietarios en miles de dólares.
+The dataset variables are:
 
-Las variables del dataset son:
+1. [crim]{.underline}: Per capita crime rate by town.
+2. [zn]{.underline}: Proportion of residential land zoned for lots over 25,000 square feet.
+3. [indus]{.underline}: Proportion of non-retail business acres per town.
+4. [chas]{.underline}: Charles River dummy variable (= 1 if tract bounds river; 0 otherwise).
+5. [nox]{.underline}: Nitrogen oxide concentration (parts per 10 million).
+6. [rm]{.underline}: Average number of rooms per dwelling.
+7. [age]{.underline}: Proportion of owner-occupied units built before 1940.
+8. [dis]{.underline}: Weighted distances to five Boston employment centers.
+8. [rad]{.underline}: Index of accessibility to radial highways.
+10. [tax]{.underline}: Full-value property-tax rate per $10,000.
+11. [ptratio]{.underline}: Pupil-teacher ratio by town.
+12. [b]{.underline}: 1000(Bk - 0.63)^2 where Bk is the proportion of Black residents by town.
+13. [lstat]{.underline}: Percentage of lower-status population.
+14. [medv]{.underline}: Median value of owner-occupied homes in thousands of dollars.
 
-1.  [crim:]{.underline} Tasa de criminalidad per cápita por ciudad.
-2.  [zn]{.underline}: Proporción de terreno residencial zonificado para lotes de más de 25,000 pies cuadrados.
-3.  [indus]{.underline}: Proporción de acres de negocio no minorista por ciudad.
-4.  [chas]{.underline}: Variable ficticia Charles River (= 1 si el tramo limita con el río; 0 de lo contrario).
-5.  [nox]{.underline}: Concentración de óxidos nítricos (partes por 10 millones).
-6.  [rm]{.underline}: Número promedio de habitaciones por vivienda.
-7.  [age]{.underline}: Proporción de unidades ocupadas por sus propietarios construidas antes de 1940.
-8.  [dis]{.underline}: Distancias ponderadas a cinco centros de empleo de Boston.
-9.  [rad]{.underline}: Índice de accesibilidad a autopistas radiales.
-10. [tax]{.underline}: Tasa de impuesto a la propiedad de valor total por \$10,000.
-11. [ptratio]{.underline}: Ratio alumno-profesor por ciudad.
-12. [b]{.underline}: 1000(Bk - 0.63)/\^2 donde Bk es la proporción de personas negras por ciudad.
-13. [lstat]{.underline}: Porcentaje de población de estatus bajo.
-14. [medv]{.underline}: Valor mediano de las casas ocupadas por sus propietarios en miles de dólares.
-
-Para ver un poco más en detalle los datos vamos a representarlos en gráficas para ver cómo son sus distribuciones o si podemos sacar alguna conclusión previa.
+To examine the data in more detail, we will represent them in graphs to see their distributions and to draw preliminary conclusions.
 
 ```{r}
-plots <- list()
-for (i in 1:14) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i])) +
-    geom_density(adjust=1.5, alpha=.7, fill="#f1e6b2") +
-    theme_minimal() +
-    labs(title = names(BostonHousing)[i],
-         x = names(BostonHousing)[i]) 
+plots <- list()  
+for (i in 1:14) {  
+  p <- ggplot(BostonHousing, aes_string(x = names(BostonHousing)[i])) +  
+    geom_density(adjust=1.5, alpha=.7, fill="#f1e6b2") +  
+    theme_minimal() +  
+    labs(title = names(BostonHousing)[i],  
+         x = names(BostonHousing)[i])   
 
-  plots[[colnames(BostonHousing)[i]]] <- p
-}
+  plots[[colnames(BostonHousing)[i]]] <- p  
+}  
 
-plots$chas <- ggplot(BostonHousing, aes(x=chas)) +
-  geom_bar(alpha=.7, fill="#f1e6b2", color = "black")+
-  theme_minimal() +
-  labs(title = "chas",
-       x = "chas")
+plots$chas <- ggplot(BostonHousing, aes(x=chas)) +  
+  geom_bar(alpha=.7, fill="#f1e6b2", color = "black")+  
+  theme_minimal() +  
+  labs(title = "chas",  
+       x = "chas")  
 
-grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)
-grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)
-grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
-plots$chas
+grid.arrange(plots$crim , plots$zn, plots$indus, plots$nox, ncol=2)  
+grid.arrange(plots$rm, plots$age, plots$dis, plots$rad, ncol=2)  
+grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)  
+plots$chas  
 ```
 
-1.  [Crim]{.underline}: Observamos que la tasa de criminalidad es baja aunque existen zonas en los datos que se llega a tasas muy altas de indice de criminalidad de hasta más de 80, que pueden ser los barrios problemáticos de la ciudad de Boston
+1. [Crim]{.underline}: We observe that the crime rate is generally low, although some areas in the dataset reach very high crime rates, up to more than 80, likely representing problematic neighborhoods in Boston.
 
-2.  [Zn]{.underline}: Esta gráfica nos quiere decir que no hay muchas zonas residenciales, aunque hay dos picos intermedios sobre 23 y 80 que puede ser barrios residenciales.
+2. [Zn]{.underline}: This graph indicates that there are not many residential areas, although two intermediate peaks around 23 and 80 might represent residential neighborhoods.
 
-3.  [Indus]{.underline}: Hay dos zonas de Boston con negocios de minoristas
+3. [Indus]{.underline}: There are two zones in Boston with non-retail business areas.
 
-4.  [Nox]{.underline}: La mayoria de zonas de Boston tienen una densidad de 0.4 y 0.6 ppm de oxido nitrico aunque hay otras menos que llegan hasta 0.9 ppm.
+4. [Nox]{.underline}: Most areas of Boston have a density of 0.4 and 0.6 ppm of nitrogen oxide, although some areas reach up to 0.9 ppm.
 
-5.  [Rm]{.underline}: El número promedio de habitaciones en Boston son de aproximadamente 6 habitaciones por vivienda.
+5. [Rm]{.underline}: The average number of rooms in Boston homes is about 6 rooms per dwelling.
 
-6.  [Age]{.underline}: Como vemos, la matoria de casas de Boston están construidas antes 1940. La cola a la izquierda nos puede sugerir que se están construyendo casas nuevas en Boston.
+6. [Age]{.underline}: As we can see, most homes in Boston were built before 1940. The tail on the left suggests that new houses are being built in Boston.
 
-7.  [Dis]{.underline} : Esta gráfica nos indica que la mayoría de zonas se encuentran cerca de centros de empleo indicando que podría ser el centro de la ciudad, aunque la cola de la derecha nos indica que puede que los barrios residenciales se encuentren a las afueras de la ciudad.
+7. [Dis]{.underline}: This graph indicates that most areas are near employment centers, suggesting they may be downtown, although the right tail suggests that residential areas may be located in the outskirts.
 
-8.  [Rad]{.underline}: Esta gráfica nos muestra que la mayoría de zonas se encuentran bien comunicadas con autopistas, pero hay una cierta densidad de zonas lejanas a autopistas por lo que podría indicar que son zonas residenciales o marginadas.
+8. [Rad]{.underline}: This graph shows that most areas are well-connected to highways, but there is a certain density of areas far from highways, which could indicate either residential or marginalized areas.
 
-9.  [Tax]{.underline}: Esto nos indica que hay una distribución normal de las tasas excepto unas zonas que pagan más impuestos. Nos sugiere que puede ser una zona residencial de lujo.
+9. [Tax]{.underline}: This suggests that there is a normal distribution of property tax rates, except for certain areas that pay higher taxes, likely indicating luxury residential zones.
 
-10. [Ptratio]{.underline}: La mayoría se situa sobre 20 alumnos por profesor. La distribución se ensancha en la cola izquierda porque en colegios privados el ratio suele disminuir.
+10. [Ptratio]{.underline}: Most areas have a student-to-teacher ratio around 20. The distribution broadens on the left tail because private schools tend to have lower ratios.
 
-11. [B]{.underline}: Esta grádica nos puede sugerir que hay pocas zonas en la que la mayoría de personas son de raza caucásica.
+11. [B]{.underline}: This graph may suggest that there are few areas where most residents are Caucasian.
 
-12. [Lstat]{.underline}: La tasa de personas con estatus bajo ronda el 8% pero la cola de la derecha nos sugiere que hay zonas donde el porcentaje sube por lo que puede ser zonas marginales.
+12. [Lstat]{.underline}: The lower-status population percentage is around 8%, but the right tail suggests that there are areas where the percentage increases, likely marginal zones.
 
-13. [Chas]{.underline}: La mayoría de zonas están alejadas del rio Charles
+13. [Chas]{.underline}: Most areas are far from the Charles River.
 
-## Pregunta 3. Tipo de problema
+## Type of problem
 
-***¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?***
+In regression, the dependent or target variable is continuous, meaning it can take any value within a range. In the case of BostonHousing, the variable "medv" is clearly an example of a continuous variable, as housing prices can vary across a broad spectrum, theoretically without specific limits within the observed data ranges.
 
-En regresión, la variable dependiente o variable objetivo es continua, lo que significa que puede tomar cualquier valor dentro de un rango. En el caso de **BostonHousing**, la variable "medv" es un claro ejemplo de una variable continua, ya que el valor de las viviendas puede variar en un amplio espectro, teóricamente sin límites específicos dentro de los rangos observados en los datos.
+The primary goal of a regression problem is to predict specific values of the dependent variable based on one or more independent variables (predictors). In this context, we are interested in predicting the value of homes (medv) based on other characteristics of the dataset, such as the crime rate (crim), the average number of rooms per dwelling (rm), etc.
 
-El objetivo principal de un problema de regresión es predecir valores específicos de la variable dependiente basándose en una o más variables independientes (predictores). En este contexto, estamos interesados en predecir el valor de las viviendas (medv) a partir de otras características del dataset, como la tasa de criminalidad (crim), el número promedio de habitaciones por vivienda (rm), etc.
-
-Vemos la distribución de los datos "medv" para tener una imagén inicial de esta variable.
+Let's examine the distribution of the "medv" data to get an initial picture of this variable.
 
 ```{r}
 p1 <- ggplot(BostonHousing, aes(x = medv)) +
@@ -178,9 +171,9 @@ p2<- ggplot(BostonHousing, aes(x=medv))+
 grid.arrange(p1, p2, ncol=1)
 ```
 
-La mayoría de casas valen alrededor de 20.000 a 23.000 USD. Vemos algunos casos interesantes que podemos tener en cuenta que hay varias casas que no siguen una tendencia normal ya que hay un pico de unas observaciones cuyos valores son de 50.000 USD.
+Most homes are priced around 20,000 to 23,000 USD. We notice a few interesting cases where several homes deviate from the normal trend, with some observations having a value of 50,000 USD.
 
-Vamos a ver ahora cómo se correlaciona la variable "medv" con las variables predictoras
+Let’s now examine how the "medv" variable correlates with the predictor variables.
 
 ```{r, warning=FALSE}
 plots <- list()
@@ -214,21 +207,21 @@ grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
 plots$chas
 ```
 
-Un resumen de lo visto en los gráficos de puntos:
+A summary of the scatter plots:
 
-1.  [Crim]{.underline}: el precio de los barrios con mayor indice de crimininalidad es menor.
-2.  [zn]{.underline}: Se aprecia una ligera relación positiva en esta variable
-3.  indus: A mayor proporcion de negocios no minorista, el precio de la vivienda cae.
-4.  [nox]{.underline}: Se ve una ligera tenendecia a que cuanto mayor es la cantidad de oxido nitrico menor es el precio de las viviendas. Es decir, las zonas más alejadas de la ciudad tendrán un valor mayor en el mercado.
-5.  [rm]{.underline}: Se ve una clara correlación positiva entre el número de habitaciones y el precio de la vivienda.
-6.  [age]{.underline}: Se intuye que en los barrios más modernos el precio es ligeramente superior al casco antiguo.
-7.  [dis]{.underline}: Las zonas más alejadas de la ciudad parece ser que tienen los precios de viviendas más caros
-8.  [rad]{.underline}: Parece ser que hay barrios con poca accesibilidad a la autopista y son aquellos con un precio más bajo. Hay algunos barrios donde el precio de la vivienda es muy alto y también tiene poca accesibilidad. Puede ser que sean zonas de residencia de lujo.
-9.  [tax]{.underline}: Se ve una ligera correlacion negativa en esta variable.
-10. [ptratio]{.underline}: Las zonas con las viviendas más caras tienen un ratio más bajo de alumno-profesorado.
-11. [b]{.underline}: No se una relación clara
-12. [lstat]{.underline}: Esta relación es bastante clara, ya que las personas con estatus bajo viven en zonas con el precio de la vivienda bajo
-13. [chas]{.underline}: La descompesación de las clases no nos deja dar una conclusión aunque parece que las zonas cercanas al rio Charles aumentan el precio de la vivienda
+1. [Crim]{.underline}: Neighborhoods with higher crime rates tend to have lower housing prices.
+2. [Zn]{.underline}: There is a slight positive relationship in this variable.
+3. Indus: As the proportion of non-retail businesses increases, housing prices fall.
+4. [Nox]{.underline}: There is a slight tendency for higher nitrogen oxide levels to be associated with lower housing prices. This suggests that areas farther from the city have higher market values.
+5. [Rm]{.underline}: There is a clear positive correlation between the number of rooms and housing prices.
+6. [Age]{.underline}: It appears that in more modern neighborhoods, housing prices are slightly higher than in older areas.
+7. [Dis]{.underline}: Areas farther from the city seem to have higher housing prices.
+8. [Rad]{.underline}: It seems that some neighborhoods with low highway access have lower housing prices, but some high-value homes also have limited highway access, suggesting luxury residential areas.
+9. [Tax]{.underline}: There is a slight negative correlation in this variable.
+10. [Ptratio]{.underline}: Neighborhoods with higher housing prices tend to have lower student-teacher ratios.
+11. [B]{.underline}: There is no clear relationship.
+12. [Lstat]{.underline}: This relationship is quite clear, as lower-status populations tend to live in areas with lower housing prices.
+13. [Chas]{.underline}: The imbalance between classes does not allow us to draw a firm conclusion, although it seems that areas near the Charles River tend to have higher housing prices.
 
 ```{r}
 correlations <- cor(BostonHousing[,c(-4)])
@@ -249,24 +242,22 @@ ggplot(cor_df, aes(x = Variable, y = Correlation, fill= Correlation)) +
   scale_fill_viridis_c() 
 ```
 
-En esta gráfica de correlación vemos que la variable mas correlacionado con la variable "medv" es aquella variable que mide el numero de personas con estatus bajo (lstat) con una correlación negativa. Luego hay otras como "ptratio", "indus" o "tax". La variable con mayor correlación positiva es el número de habitaciones (rm), seguida de la variable con mayor zonas residenciales (zn).
+In this correlation plot, we can see that the variable most correlated with "medv" is "lstat," which measures the percentage of lower-status individuals, with a negative correlation. Other variables like "ptratio," "indus," and "tax" also show correlations. The variable most positively correlated with "medv" is the number of rooms (rm), followed by "zn" (proportion of residential land).
 
-## Pregunta 4. Sesgos
+## Biases
 
-***Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?***
+Principal component analysis (PCA) is a statistical technique that reduces data dimensionality while maintaining as much variation as possible. It achieves this by identifying directions (principal components) in which the data vary the most. In addition to dimensionality reduction, PCA can provide insights into the underlying structure of the data, including potential biases.
 
-El análisis de componentes principales, PCA, es una técnica estadística que permite reducir la dimensionalidad de los datos, manteniendo al mismo tiempo la mayor cantidad de variación posible. Esto se logra identificando las direcciones (componentes principales) en las cuales los datos varían más. Además de reducir la dimensionalidad, el PCA puede ofrecer insights sobre la estructura subyacente de los datos, incluidos los sesgos potenciales.
+To determine if our data is suitable for PCA, we must pass Bartlett's sphericity test and the Kaiser-Meyer-Olkin (KMO) test.
 
-Para contrastar si nuestros datos son adecuados para hacer el análisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
-
-En ambos tests rechazamos la hipotesis nula por lo que nuestros datos son adecuados para realizar el PCA Además el test KMO nos da un criterio de 0.86 que es un criterio alto de adecuación para el PCA.
+For both tests, we reject the null hypothesis, meaning our data is suitable for PCA. Additionally, the KMO test gives a high adequacy criterion of 0.86 for PCA.
 
 ```{r}
 bart_spher(BostonHousing[,c(-4,-14)])
 KMOS(BostonHousing[,c(-4,-14)])
 ```
 
-Para aplicar el PCA de manera correcta, es esencial determinar si nuestros datos requieren un escalado apropiado.
+To apply PCA correctly, it is essential to determine if our data needs proper scaling.
 
 ```{r}
 datos_long_boston <- pivot_longer(BostonHousing, cols = -chas, names_to = "Variable", values_to = "Valor")
@@ -288,7 +279,7 @@ ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
   ylab("Count")
 ```
 
-Se debe prestar atención a variables como "tax" y "b", las cuales se caracterizan por tener valores significativamente mayores en comparación con el resto de las variables en nuestro conjunto de datos. Este desequilibrio en la magnitud de los valores puede influir en el resultado del PCA, haciendo indispensable un ajuste de escala para asegurar una interpretación precisa y equitativa de los componentes principales.
+We should pay attention to variables such as "tax" and "b," which have significantly higher values compared to the other variables. This imbalance in value magnitudes can influence PCA results, making scaling necessary to ensure a fair interpretation of the principal components.
 
 ```{r}
 pca_result_boston <- prcomp(BostonHousing[,c(-4,-14)], scale = TRUE)
@@ -317,9 +308,9 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[1:10,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-Las cinco componentes principales primeras explican el 85% de la varianza total, lo que nos permite avanzar con este conjunto de datos para investigar la presencia de sesgos mediante un mapa de calor que visualiza las correlaciones. Es notable que la primera componente principal por sí sola aclare más del 50% de la varianza, destacando su significativa contribución a la comprensión de la estructura de los datos.
+The first five principal components explain 85% of the total variance, allowing us to proceed with this dataset to investigate biases through a heatmap that visualizes correlations. Notably, the first principal component alone explains more than 50% of the variance, highlighting its significant contribution to understanding the data's structure.
 
-En el siguiente heatmap vemos la correlación de las componentes principales con las variables.
+The following heatmap shows the correlation of the principal components with the variables.
 
 ```{r}
 sesgos <- cor(pca_result_boston$x[,1:5], BostonHousing[,c(-4,-14)])
@@ -335,7 +326,9 @@ pheatmap(sesgos,
          angle_col = 45, cutree_cols = 3)
 ```
 
-Observamos que la componente principal 1 desempeña un papel fundamental en la diferenciación de los clusters, destacándose como el principal factor de separación. Curiosamente, las variables que presentan una menor correlación con la componente principal 1 (b, rm, zn, dis) coinciden con aquellas que muestran una mayor correlación con la variable medv, y viceversa, en el apartado de la pregunta 3 de este documento. Este patrón sugiere que dichas variables son especialmente adecuadas para inferir el precio medio de la vivienda, lo que indica su relevancia y utilidad en el análisis de los factores que determinan el valor medio de las casas en Boston.
+This heatmap suggests that the first principal component is highly correlated with variables such as "lstat," "rm," and "ptratio." The second component appears to capture variations related to variables like "crim" and "age."
+
+Based on these results, we can tentatively conclude that the first principal component captures socioeconomic biases, as it is strongly associated with variables such as the percentage of lower-status individuals (lstat) and the average number of rooms (rm).
 
 ```{r, warning=FALSE}
 pca <- as.data.frame(pca_result_boston$x[,1:5], stringsAsFactors=F)
@@ -369,21 +362,21 @@ grid.arrange(plots$tax, plots$ptratio, plots$b, plots$lstat, ncol = 2)
 grid.arrange(plots$chas, plots$medv, ncol=2, nrow=2)
 ```
 
-Como ya veiamos en el heatmap, hay un sesgo claro en nuestros datos ya que nuestros datos del PCA generan dos clusters grandes. Observamos que seis barrios se distancian significativamente del resto, ubicados en la zona inferior derecha del gráfico.
+As seen in the heatmap, there is a clear bias in the data as the PCA results form two large clusters. We observe six neighborhoods significantly distanced from the rest, located in the bottom-right corner of the graph.
 
-El cluster con forma redondeada, que podría interpretarse como el núcleo urbano de Boston, se caracteriza por su óptima accesibilidad a las autopistas (rad), un régimen tributario más elevado (tax), una concentración superior de edificaciones antiguas (age), niveles más altos de óxidos de nitrógeno (nox), y una mayor densidad de zonas industriales (indus).
+The rounded cluster, which could represent Boston’s urban core, is characterized by optimal highway accessibility (rad), a higher tax regime (tax), older buildings (age), higher levels of nitrogen oxides (nox), and a greater concentration of industrial zones (indus).
 
-Por contraste, el segundo cluster alargado sugiere una transición hacia la periferia, como lo indica el aumento en la distancia media a centros de empleo (dis). Este patrón se ve reflejado en la reducción progresiva de zonas industriales (indus) hacia las afueras, dando paso a un incremento de áreas residenciales (zn), especialmente evidente en la extensión del cluster elongado. Adicionalmente, la presencia de viviendas con un mayor número promedio de habitaciones (rm) hacia la izquierda del cluster refuerza esta noción de expansión urbana.
+By contrast, the elongated second cluster suggests a transition to the periphery, as indicated by the increased average distance to employment centers (dis). This pattern is reflected in the progressive reduction of industrial areas (indus) towards the outskirts, leading to an increase in residential areas (zn), especially evident in the extension of the elongated cluster. Additionally, the presence of houses with a higher average number of rooms (rm) reinforces the notion of urban expansion.
 
-Un detalle revelador es la existencia de un barrio céntrico con un porcentaje inusualmente bajo de residentes negros (b). Sin embargo, los datos no proporcionan más características distintivas de este barrio.
+A revealing detail is the existence of a central neighborhood with an unusually low percentage of Black residents (b). However, the data does not provide more distinctive characteristics for this neighborhood.
 
-La proximidad al río Charles (chas) en el cluster redondeado parece delinear una zona de exclusividad en el corazón de la ciudad, donde los valores inmobiliarios (medv) son sustancialmente más altos y las viviendas ostentan un número mayor de habitaciones en comparación con el resto del centro urbano.
+Proximity to the Charles River (chas) in the rounded cluster seems to delineate an exclusive area in the city center, where property values (medv) are substantially higher, and houses feature more rooms compared to the rest of the urban center.
 
-Enfocando la atención en los seis outliers en la esquina inferior derecha, se aprecian índices de criminalidad (crim) más elevados y un porcentaje más alto de personas de estatus socioeconómico bajo (lstat). Estos barrios presentan una marcada diversidad racial ya que, o son exlusivamente personas negras o personas blancas (b), y están situados cerca de las autopistas, caracteristica de barrios marginales por el tráfico de drogas.
+Focusing on the six outliers in the bottom-right corner, we see elevated crime rates (crim) and a higher percentage of lower socioeconomic status individuals (lstat). These neighborhoods present marked racial diversity as they are either predominantly Black or White (b) and are located near highways, a characteristic of marginalized areas due to drug trafficking.
 
-Finalmente, al examinar la variable dependiente medv, se deduce que la distancia del núcleo urbano correlaciona con un incremento en el valor de las viviendas, que tienden a ser más espaciosas y situadas en zonas predominantemente residenciales. El sector adyacente al río Charles en el núcleo urbano se destaca por su alto valor inmobiliario. En contraste, las áreas con una tasa de criminalidad más alta tienden a coincidir con los precios de vivienda más bajos, lo que señala una relación inversa entre seguridad y valor inmobiliario.
+Finally, examining the dependent variable medv, we deduce that distance from the urban core correlates with an increase in housing value, which tends to be larger and located in predominantly residential areas. The sector adjacent to the Charles River in the urban core stands out for its high property values. In contrast, areas with higher crime rates tend to have lower housing prices, indicating an inverse relationship between safety and property value.
 
-Vamos a ver ahora la importancia de las variables a cada una de las componentes principales.
+Now, let's examine the importance of variables for each principal component.
 
 ```{r}
 p1 <- fviz_cos2(pca_result_boston, choice = "var", axes = 1, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 1")
@@ -394,13 +387,13 @@ p4 <- fviz_cos2(pca_result_boston, choice = "var", axes = 4, top= 5, fill = "#00
 grid.arrange(p1, p2, p3, p4, ncol=2)
 ```
 
-El cuadrado del coseno (Cos2) de una variable en una componente principal indica cuánto contribuye esa variable a la varianza explicada por esa componente principal. Para cada componente principal, se presentan las cinco variables con el mayor Cos2 en esa dimensión particular.
+The cosine squared (Cos2) of a variable in a principal component indicates how much that variable contributes to the variance explained by that component. For each principal component, the five variables with the highest Cos2 values are presented.
 
-Observamos que la primera y segunda componentes principales tiene varias variables que explican su varianza. Aunque la contribución de las variables a la varianza de la componente principal 2 es notable, es menos significativa que las contribuciones de las variables a la componente principal 1, como se puede ver por los valores más bajos de Cos2.
+We observe that the first and second principal components have several variables explaining their variance. Although the contribution of variables to the variance of the second principal component is notable, it is less significant than the contributions to the first component, as seen by the lower Cos2 values.
 
-En la componente principal 3, la variable rm tiene un Cos2 mucho más alto que las demás, indicando que es un factor más dominante en esta componente.
+In the third principal component, the variable rm has a much higher Cos2 than the others, indicating that it is a more dominant factor in this component.
 
-En la componente 4 ptratio tiene la contribución más alta, pero todas tienen valores relativamente bajos, lo que sugiere que la componente principal 4 captura menos varianza en las variables originales que las componentes anteriores.
+In the fourth component, ptratio has the highest contribution, but all variables have relatively low values, suggesting that the fourth principal component captures less variance in the original variables than the previous components.
 
 ```{r}
 pca_rotation <- round(data.frame(pca_result_boston$rotation[,1:4]),2)
@@ -414,17 +407,17 @@ formattable(pca_rotation,
   
 ```
 
-Los vectores de carga de un PCA representan la contribución de cada variable original a las componentes principales que se han calculado. Cada columna en los datos que has proporcionado representa una componente principal, y cada fila representa una variable. El valor de cada celda en la matriz de carga es el coeficiente de la variable original en la componente principal correspondiente. Estos coeficientes pueden ser interpretados como la importancia o peso de esa variable para esa componente principal específica. Un valor alto (positivo o negativo) indica que la variable tiene una fuerte relación con esa componente principal, mientras que un valor cercano a cero indica que la variable tiene poco o ningún efecto en esa dimensión. Los signos de los valores de carga indican la dirección de la relación entre la variable y la componente principal, pero en el contexto del PCA, solo la magnitud de estos valores es relevante para determinar la importancia de la variable. Los signos son arbitrarios y pueden cambiar si se ejecuta el PCA nuevamente debido a la inversión del eje.
+The loadings vectors of a PCA represent the contribution of each original variable to the computed principal components. Each column in the data provided represents a principal component, and each row represents a variable. The value of each cell in the loading matrix is the coefficient of the original variable in the corresponding principal component. These coefficients can be interpreted as the importance or weight of that variable for that specific principal component. A high value (positive or negative) indicates that the variable is strongly related to that principal component, while a value close to zero indicates that the variable has little or no effect in that dimension. The signs of the loading values indicate the direction of the relationship between the variable and the principal component, but in the context of PCA, only the magnitude of these values is relevant for determining the importance of the variable. The signs are arbitrary and may change if the PCA is run again due to axis inversion.
 
-En la componente principal 1, las tendencias generales observadas en esta componente principal son valores positivos altos para "indus", "nox", "age", "rad", y "tax", lo cual sugiere que estas variables contribuyen significativamente y en la misma dirección a la primera componente principal. Estas variables podrían estar asociadas con el centro urbano o el desarrollo industrial.
+In the first principal component, the general trends observed are high positive values for "indus", "nox", "age", "rad", and "tax", which suggests that these variables contribute significantly and in the same direction to the first principal component. These variables may be associated with the urban core or industrial development.
 
-En la componente principal 2, las variables "zn" y "crim" tienen los valores de carga más altos por magnitud pero en direcciones opuestas. "zn" representa las zonas residenciales, mientras que "crim" podría ser más alta en áreas urbanas densamente pobladas.
+In the second principal component, the variables "zn" and "crim" have the highest loading values by magnitude but in opposite directions. "zn" represents residential zones, while "crim" might be higher in densely populated urban areas.
 
-La tercera componente principal está dominada por "rm" con un valor alto y positivo, lo que significa que "rm" es el contribuyente principal a esta componente.
+The third principal component is dominated by "rm" with a high positive value, meaning "rm" is the main contributor to this component.
 
-Para la cuarta componente principal, "ptratio" y "b" tienen los valores más altos, pero ptratio tiene una carga negativa fuerte, lo que podría indicar una relación inversa con esta componente. Esta dimensión podría capturar aspectos del entorno social o educativo en las áreas del estudio.
+For the fourth principal component, "ptratio" and "b" have the highest values, but ptratio has a strong negative loading, suggesting an inverse relationship with this component. This dimension might capture aspects of the social or educational environment in the study areas.
 
-A continuación, muestro gráficamente los resultados de las dos primeras componentes principapeles para ver la dirección e importancia de las mismas con lo descrito en este apartado.
+Below, I graphically show the results of the first two principal components to see the direction and importance of each variable as described in this section.
 
 ```{r}
 fviz_pca_biplot(pca_result_boston,
@@ -437,23 +430,19 @@ fviz_pca_biplot(pca_result_boston,
                 )
 ```
 
-## Pregunta 5. Elección algoritmo
+## Algorithm Selection
 
-***¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?***
+Given the nature of the BostonHousing data, I consider a regression algorithm should be used to predict the variable medv with respect to the other variables. Given the dataset's size, the best algorithms for this practice would be k-nearest neighbors (KNN).
 
-Dada la naturaleza de los datos de Bostonhousing, considero que se debe utilizar un algoritmo de regresión para predecir la variable medv con respecto a las demás variables. Debido al tamaño de los datos los mejores algoritmos para esta práctica es algoritmo de k-vecinos más cercanos (KNN).
+KNN is a non-parametric algorithm and can capture non-linear relationships between variables without requiring a specific model formulation. KNN can be useful for identifying local and non-linear patterns that linear regression might miss, especially in areas where properties have distinctive characteristics that only apply to a specific neighborhood.
 
-KNN es un algoritmo no paramétrico y puede capturar relaciones no lineales entre las variables sin una formulación específica de un modelo. KNN puede ser útil para identificar patrones locales y no lineales que la regresión lineal podría pasar por alto, especialmente en áreas donde las propiedades tienen características distintivas que solo se aplican a un vecindario específico.
+The KNN algorithm is intuitive and easy to understand as it predicts the value of a new observation by averaging the values of the K nearest neighbors. KNN takes into account the locality of the data, which could be particularly relevant for real estate data where location and neighborhood play a crucial role in housing prices.
 
-El algoritmo KNN es intuitivo y fácil de entender ya que predice el valor de una nueva observación promediando los valores de los K vecinos más cercanos. KNN tiene en cuenta la localidad de los datos, lo que podría ser particularmente relevante para datos inmobiliarios donde la ubicación y el vecindario juegan un papel crucial en el precio de las viviendas.
+## Data Transformation
 
-## Pregunta 6. Transformación
+It is important to pay attention to data preprocessing when using KNN. Since KNN depends on the distance between observations, the variables must be normalized or standardized so that they are on the same scale. Otherwise, variables with larger ranges could disproportionately influence the prediction.
 
-***¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.***
-
-Es importante prestar atención al preprocesamiento de los datos al utilizar KNN. Dado que KNN depende de la distancia entre las observaciones, las variables deben ser normalizadas o estandarizadas para que tengan la misma escala. De lo contrario, las variables con rangos más grandes podrían influir desproporcionadamente en la predicción.
-
-También debemos pasar la variable categórica chas a numérica mediante codificación Dummy. En este caso, como solamente hay dos niveles, sería solamente pasar la variable a numerica entre 0 y 1 sin añadir columnas adicionales.
+We also need to convert the categorical variable chas to numeric using Dummy encoding. In this case, since there are only two levels, we would simply convert the variable to numeric values between 0 and 1 without adding additional columns.
 
 ```{r}
 BostonHousing.scaled <- data.frame(scale(BostonHousing[,-4]))
@@ -480,11 +469,9 @@ ggplot(datos_long_boston, aes(x = Variable, y = Valor, fill = Variable)) +
 
 ```
 
-## Pregunta 7. Algoritmo
+## Algorithm
 
-***Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados***
-
-En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de BostonHousing escalados para entrenar el algoritmo de KNN.
+First, we will generate the training and test data from the scaled BostonHousing data to train the KNN algorithm.
 
 ```{r}
 set.seed(1234)
@@ -498,21 +485,21 @@ trainSet.boston <- BostonHousing.scaled[boston.TrainIdx.80, ]
 testSet.boston <- BostonHousing.scaled[-boston.TrainIdx.80, ]
 ```
 
-La función kknn es parte del paquete kknn, que está integrado con caret. Algunos de los hiperparámetros que se pueden ajustar al utilizar la función kknn a través de caret incluyen:
+The kknn function is part of the kknn package, which is integrated with caret. Some of the hyperparameters that can be tuned using the kknn function through caret include:
 
-1.  [kmax]{.underline}: El número de vecinos más cercanos a considerar en la votación o el promedio. Es el hiperparámetro principal del KNN. Un k pequeño puede hacer que el modelo sea sensible al ruido de los datos (sobreajuste), mientras que un k grande puede hacer que el modelo sea demasiado general (subajuste).
+1. [kmax]: The number of nearest neighbors to consider in the vote or average. It is the main hyperparameter of KNN. A small k can make the model sensitive to noise in the data (overfitting), while a large k can make the model too general (underfitting).
 
-2.  [distance]{.underline}: Define la métrica de distancia a utilizar para calcular la cercanía entre puntos. Por ejemplo, una distancia de 2 se refiere a la distancia euclidiana, mientras que 1 se refiere a la distancia de Manhattan. Distancias fraccionarias también son posibles y pueden ser útiles para capturar estructuras no lineales.
+2. [distance]: Defines the distance metric to use for calculating proximity between points. For example, a distance of 2 refers to Euclidean distance, while 1 refers to Manhattan distance. Fractional distances are also possible and can be useful for capturing non-linear structures.
 
-3.  [kernel]{.underline}: Especifica la función de ponderación a aplicar a los vecinos. Algunas opciones incluyen "rectangular" (todos los vecinos ponderan igual), "triangular", "epanechnikov", "biweight", "triweight", "cos", entre otros. La ponderación puede afectar cómo influyen los vecinos en la predicción final, dando más peso a los vecinos más cercanos.
+3. [kernel]: Specifies the weighting function to apply to the neighbors. Some options include "rectangular" (all neighbors have equal weight), "triangular", "epanechnikov", "biweight", "triweight", "cos", etc. Weighting can affect how neighbors influence the final prediction, giving more weight to closer neighbors.
 
-Es importante destacar que el ajuste de hiperparámetros debe hacerse cuidadosamente. Por ejemplo, seleccionar k puede requerir la implementación de técnicas como la validación cruzada para encontrar un valor que equilibre bien el sesgo y la varianza. La elección de la métrica de distancia y la función de kernel debe basarse en el conocimiento del problema y el dominio de aplicación, así como en la experimentación y validación.
+It is important to note that hyperparameter tuning should be done carefully. For example, selecting k may require implementing techniques like cross-validation to find a value that balances bias and variance. The choice of distance metric and kernel function should be based on domain knowledge and experimentation, as well as validation.
 
 ```{r}
 modelLookup(("kknn"))
 ```
 
-Debido a que el numero de muestras que tenemos no es muy grande, he decidido optar por un entrenamiento de validación cruzada repetitiva con 3 repeticiones y 10 particiones. Permito el análisis en paralelo para aumentar el rendimiento
+Since we don't have a large sample size, I have chosen repetitive cross-validation with 3 repetitions and 10 partitions. Parallel analysis is enabled to improve performance.
 
 ```{r}
 set.seed(1234)
@@ -524,13 +511,13 @@ kknnControl.boston <- trainControl(method = "repeatedcv",
                            allowParallel = T)
 ```
 
-En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 21 posibilidades combinatorias:
+In the first attempt to find the best model, I run a hyperparameter grid search with the following values, giving 21 combinatory possibilities:
 
--   kmax: 5, 7, 9 , 11
+- kmax: 5, 7, 9, 11
 
--   distance: 1, 2, 3
+- distance: 1, 2, 3
 
--   kernel: rectangular, triangular, optimal
+- kernel: rectangular, triangular, optimal
 
 ```{r}
 set.seed(1234)
@@ -556,15 +543,15 @@ plot(myfit.boston.cv10.rp3)
 
 ```
 
-En este primer modelo vemos que los mejores hiperparámetros son con una kmax de 5, distancia Manhattan de 1 y el kernel optimal. La RMSE y Rsquared dan valores muy buenos para este modelo.
+In this first model, we see that the best hyperparameters are kmax of 5, Manhattan distance of 1, and the optimal kernel. The RMSE and Rsquared values show very good results for this model.
 
-Vamos a probar con otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
+Let's try with other types of kernels to see if we improve the model. The hyperparameters are:
 
--   kmax: 5, 7, 9 , 11
+- kmax: 5, 7, 9, 11
 
--   distance: 1
+- distance: 1
 
--   kernel: optimal, epanechnikov, biweight, triweight, cos, gaussian, rank
+- kernel: optimal, epanechnikov, biweight, triweight, cos, gaussian, rank
 
 ```{r}
 set.seed(1234)
@@ -589,7 +576,7 @@ myfit.boston.cv10.rp3.2 <- train(y=y, x = x,
 plot(myfit.boston.cv10.rp3.2)
 ```
 
-El mejor modelo posible lo seguimos encontrando con los hiperparámetros anteriores, por lo que no mejoramos el modelo. Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro modelo de entrenamiento nos da como resultado unas Rsquared de entorno 0.85 y un RMSE de 0.39 sin grandes cambios, aunque hay unas pocas iteraciones con un RMSE un poco más alto y un Rsquared más bajo.
+The best possible model is still found with the previous hyperparameters, so we don't improve the model. As seen in the following graphs, almost all iterations of our training model result in Rsquared values around 0.85 and an RMSE of 0.39 without major changes, although there are a few iterations with slightly higher RMSE and lower Rsquared.
 
 ```{r, warning=FALSE}
 resample <- myfit.boston.cv10.rp3.2$resample
@@ -616,7 +603,7 @@ p2 <- ggplot(data = resample, aes(x = Rsquared)) +
 grid.arrange(p1, p2, ncol = 2)
 ```
 
-En la siguiente tabla vemos las variables más importantes para nuestro modelo situando a "lstat" y "rm" como las variables más importantes. "Chas" no influye nada en nuestro modelo ya que los datos están muy desbalanceados.
+In the following table, we see the most important variables for our model, with "lstat" and "rm" being the most important. "Chas" does not influence our model since the data is highly imbalanced.
 
 ```{r}
 var.import.boston <- varImp(myfit.boston.cv10.rp3.2)
@@ -629,7 +616,7 @@ formattable(var.import.boston.ordered,
   )
 ```
 
-Vemos que los valores predecidos caen en lugares parecidos a los valores de train y de test sin que haya ningún outlier aparente.
+We see that the predicted values fall in similar locations to the train and test values, with no apparent outliers.
 
 ```{r}
 preds.boston <- predict(myfit.boston.cv10.rp3.2$finalModel, newdata = testSet.boston)
@@ -671,7 +658,7 @@ plots$chas
 
 ```
 
-El análisis del error de predicción en relación con los valores reales de la variable "medv" en el conjunto de test revela una tendencia diferenciada en función del rango de precios de las viviendas. Observamos que para las viviendas con un valor cercano a la mediana de medv, las predicciones son notablemente precisas, reflejando un error bajo. No obstante, para las viviendas con un valor de "medv" superior al promedio, el modelo tiende a tener un rendimiento menos exacto, resultando en errores de predicción más elevados.
+The analysis of the prediction error relative to the actual medv values in the test set reveals a differentiated trend depending on the housing price range. For houses with a value close to the median of medv, predictions are notably accurate, reflecting low error. However, for houses with medv values higher than average, the model tends to perform less accurately, resulting in higher prediction errors.
 
 ```{r}
 testSet.boston %>%
@@ -684,9 +671,9 @@ testSet.boston %>%
   labs(title = "Predictive error test data", x = "Medv test data")
 ```
 
-Finalmente, para ver si incurrimos en overfitting o underfitting, calculamos el RMSE de los valores predichos con los datos de entrenamiento y con lo datos de test. Observamos que en los datos de entrenamiento el error es menor que en los datos de test pero la diferencia no es muy grande, siendo el error muy bajo.
+Finally, to check for overfitting or underfitting, we calculate the RMSE of the predicted values with the training data and the test data. We observe that the training data error is smaller than the test data error, but the difference is not large, indicating a very low error.
 
-**Encontramos un modelo bueno para predecir el precio de la vivienda con estas variables en la ciudad de Boston.**
+**We find a good model for predicting housing prices with these variables in the city of Boston.**
 
 ```{r, warning=FALSE}
 preds.boston.train <- predict(myfit.boston.cv10.rp3.2$finalModel, newdata = trainSet.boston)
@@ -698,82 +685,61 @@ cat("El error RMSE de los datos de evaluación es", sqrt((1/nrow(testSet.boston)
 
 # LetterRecognition
 
-Los datos de este dataset se localizan en el paquete R mlbench.
+The data for this dataset is found in the R mlbench package.
 
 ```{r}
 library(mlbench)
 data(LetterRecognition)
 ```
 
-## Pregunta 1. Tamaño y tipo
-
-***¿Qué tamaño tiene? ¿De qué tipo son las variables?***
+## Size and Type
 
 ```{r}
 str(LetterRecognition)
 ```
 
-El dataset contiene 20.000 filas y 17 variables.
+The dataset contains 20,000 rows and 17 variables.
 
-Todas las variables son de tipo numérico excepto la variable lettr que es la variable dependiente.
+All variables are numerical except for the variable lettr, which is the dependent variable.
 
-Un primer vistazo a los datos numéricos para ver si tiene nulos, la distribución, búsqueda de variables categóricas, etc
+Here’s a first look at the numerical data to check for missing values, distribution, and categorical variables.
 
 ```{r}
 Hmisc::describe(LetterRecognition)
 ```
 
-No tiene valores nulos y las distribuciones van de 0 a 15 en todas las variables menos en la variable dependiente lettr.
+There are no missing values, and the distributions range from 0 to 15 in all variables except for the dependent variable lettr.
 
-## Pregunta 2. Representación ejemplos
+## Representation of Examples
 
-***Explica qué representan los ejemplos***
+The LetterRecognition dataset in the mlbench package is designed for the task of identifying uppercase letters from the English alphabet based on black and white pixel images. Each letter image is based on 20 different fonts, and each letter from these fonts was randomly distorted to produce a set of 20,000 unique stimuli. These stimuli were converted into 16 primitive numerical attributes, such as statistical moments and edge counts, which were scaled to fit a range of integer values from 0 to 15.
 
-Los datos de LetterRecognition del paquete mlbench en R están diseñados para la tarea de identificar letras del alfabeto inglés en mayúsculas a partir de imágenes en píxeles blanco y negro. Cada imagen de letra se basa en 20 fuentes diferentes, y cada letra de estas fuentes se distorsionó aleatoriamente para producir un conjunto de 20,000 estímulos únicos. Estos estímulos se convirtieron en 16 atributos numéricos primitivos, como momentos estadísticos y recuentos de bordes, que se escalaron para ajustarse a un rango de valores enteros de 0 a 15.
+The dataset contains 20,000 observations with 17 variables. The first variable is categorical, with levels from A to Z, representing each of the alphabet letters. The remaining 16 variables are numerical and represent various statistical and geometric characteristics of the letter images.
 
-El dataset contiene 20,000 observaciones con 17 variables. La primera variable es categórica y tiene niveles de la A a la Z, representando cada una de las letras del alfabeto. Las 16 variables restantes son numéricas y representan diversas características estadísticas y geométricas de las imágenes de las letras.
+1. x.box: The horizontal position of the box enclosing the letter (the smallest rectangle that can contain the letter image).
+2. y.box: The vertical position of the box enclosing the letter.
+3. width: The width of the box in pixels.
+4. high: The height of the box in pixels.
+5. onpix: The total number of on pixels (i.e., pixels containing part of the letter) in the image.
+6. x.bar: The mean horizontal position of all on pixels.
+7. y.bar: The mean vertical position of all on pixels.
+8. x2bar: The variance of the horizontal position of all on pixels.
+9. y2bar: The variance of the vertical position of all on pixels.
+10. xybar: The correlation between the horizontal and vertical positions of the on pixels.
+11. x2ybr: The mean of the product of x by the vertical position of the on pixels.
+12. xy2br: The mean of the product of y by the horizontal position of the on pixels.
+13. x.ege: The number of horizontal edges (transitions from light to dark).
+14. xegvy: The correlation of x.ege with the variable y.
+15. y.ege: The number of vertical edges (transitions from light to dark).
+16. yegvx: The correlation of y.ege with the variable x.
 
-1.  [x.box]{.underline}: La posición horizontal de la caja que encierra la letra (el rectángulo más pequeño que puede contener la imagen de la letra).
+## Type of Problem
 
-2.  [y.box]{.underline}: La posición vertical de la caja que encierra la letra.
+This dataset is a classification problem. The reason is that the goal is to categorize each digital representation of a letter into one of several predefined classes, which are the letters of the alphabet. Therefore, the dataset is a classic example of a multi-class classification problem, where the machine learning model must predict which of the multiple categories (lettr) corresponds to the given features of an image.
 
-3.  [width]{.underline}: El ancho de la caja en píxeles.
+For a classification problem, it’s crucial to examine the distribution of examples among the classes. A balanced distribution of examples ensures that the machine learning model has enough data to learn the distinctive features of each class. Conversely, an imbalanced distribution can lead to a biased model that favors the more prevalent classes.
 
-4.  [high]{.underline}: La altura de la caja en píxeles.
-
-5.  [onpix]{.underline}: El total de píxeles encendidos (es decir, píxeles que contienen parte de la letra) en la imagen.
-
-6.  [x.bar]{.underline}: La media de la posición horizontal de todos los píxeles encendidos.
-
-7.  [y.bar]{.underline}: La media de la posición vertical de todos los píxeles encendidos.
-
-8.  [x2bar]{.underline}: La varianza de la posición horizontal de todos los píxeles encendidos.
-
-9.  [y2bar]{.underline}: La varianza de la posición vertical de todos los píxeles encendidos.
-
-10. [xybar]{.underline}: La correlación entre la posición horizontal y vertical de los píxeles encendidos.
-
-11. [x2ybr]{.underline}: La media del producto de x por la posición vertical de los píxeles encendidos.
-
-12. [xy2br]{.underline}: La media del producto de y por la posición horizontal de los píxeles encendidos.
-
-13. [x.ege]{.underline}: La cantidad de bordes horizontales (transiciones de claro a oscuro).
-
-14. [xegvy]{.underline}: La correlación de x.ege con la variable y.
-
-15. [y.ege]{.underline}: La cantidad de bordes verticales (transiciones de claro a oscuro).
-
-16. [yegvx]{.underline}: La correlación de y.ege con la variable x.
-
-## Pregunta 3. Tipo de problema
-
-***¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?***
-
-Este conjunto de datos es un problema de clasificación. La razón es que el objetivo es categorizar cada representación digital de una letra en una de varias clases predefinidas, que son las letras del alfabeto. Por lo tanto, el conjunto de datos es un ejemplo clásico de un problema de clasificación multiclase, donde el modelo de aprendizaje automático debe predecir cuál de las múltiples categorías (lettr) corresponde a las características dadas de una imagen.
-
-Para un problema de clasificación, es crucial examinar la distribución de los ejemplos entre las clases. Una distribución equilibrada de ejemplos asegura que el modelo de aprendizaje automático tenga suficientes datos para aprender las características distintivas de cada clase. Por otro lado, una distribución desequilibrada puede llevar a un modelo sesgado que prefiera las clases con más ejemplos.
-
-A continuación mostramos las distribuciones de las frecuencias de cada clase de la variable "lettr". Vemos que la distribución es bastante homogénea entre clases ya que ronda las 750 instancias de cada letra.
+Below, we show the distributions of the frequencies of each class for the variable lettr. We see that the distribution is fairly homogeneous between classes, with around 750 instances of each letter.
 
 ```{r}
 table(LetterRecognition$lettr)
@@ -794,20 +760,18 @@ LetterRecognition %>%
   labs(title = "Letters") 
 ```
 
-## Pregunta 4. Sesgos
+## Biases
 
-***Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?***
+To assess whether our data is suitable for Principal Component Analysis (PCA), we must pass the Bartlett's Test of Sphericity and the Kaiser-Meyer-Olkin (KMO) test.
 
-Para contrastar si nuestros datos son adecuados para hacer el analisis de componentes principales hay que pasar el test de esferecidad de Bartlett y el test de Kaiser-Meyer-Olkin.
-
-En ambos tests rechazamos la hipotesis nula por lo que nuestros datos son adecuados para realizar el PCA Además el test KMO nos da un criterio de 0.68 que es un criterio adecuado para el PCA.
+In both tests, we reject the null hypothesis, indicating that our data is appropriate for PCA. Additionally, the KMO test gives us a criterion of 0.68, which is suitable for PCA.
 
 ```{r}
 bart_spher(LetterRecognition[,-1])
 KMOS(LetterRecognition[,-1])
 ```
 
-Vamos a ver la correlación que hay entre las variables predictoras para ver cómo se agrupan. Vemos que hay 2 grupos de variables muy correlados positivamente entre sí por lo que podriamos pensar que son candidatos a ser importantes en distintas componentes principales. Luego hay otro cluster más diverso en la correlación.
+Let’s examine the correlation between the predictor variables to see how they group together. We see that there are two groups of highly positively correlated variables, making them candidates to be important in different principal components. Then there is another cluster with more diverse correlations.
 
 ```{r}
 correlations <- cor(LetterRecognition[,c(-1)])
@@ -823,7 +787,7 @@ pheatmap(correlations,
          angle_col = 45, cutree_cols = 3)
 ```
 
-Para aplicar el PCA de manera correcta, es esencial determinar si nuestros datos requieren un escalado apropiado.
+To correctly apply PCA, it’s essential to determine whether our data needs appropriate scaling.
 
 ```{r}
 datos_long_letter <- pivot_longer(LetterRecognition, cols = -lettr, names_to = "Variable", values_to = "Valor")
@@ -846,7 +810,7 @@ ggplot(datos_long_letter, aes(x = Variable, y = Valor, fill = Variable)) +
   ylab("Value")
 ```
 
-La distribución no es homogénea pero vemos que todos los datos están entre 0 y 15 por lo que no considero escalar los datos ya que todos los valores están restringidos entre esos valores y entiendo que tienen la misma escala.
+The distribution is not homogeneous, but we see that all the data is between 0 and 15, so I do not consider it necessary to scale the data since all values are restricted to that range and appear to be on the same scale.
 
 ```{r}
 pca_result.letter <- prcomp(LetterRecognition[,-1])
@@ -875,9 +839,9 @@ ggplot(df_var_exp[1:10,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[1:10,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-La primera componente solamente explica el 29% de la varianza. Con la segunda se explica hasta un 44% por lo que entendemos que las caracteristicas explicadas de nuestras variables están bien distribuidas y cada una explica algo importante en la clasificación de nuestras clases.
+The first component only explains 29% of the variance. With the second component, it explains up to 44%, so we understand that the characteristics explained by our variables are well distributed, and each explains something important in the classification of our classes.
 
-Para ver si hay sesgos claros en nuestros datos vamos a hacer una correlacion de las variables con los componentes principales.
+To see if there are clear biases in our data, let’s correlate the variables with the principal components.
 
 ```{r}
 sesgos.letter <- cor(pca_result.letter$x[,1:7], LetterRecognition[,-1])
@@ -893,9 +857,9 @@ pheatmap(sesgos.letter,
          cutree_cols = 3)
 ```
 
-Vemos que las variables "x.ege", "y.box", "high", "onpix", "x.box" y "width" tienen una correlacion muy fuerte con la componente principal 1. Curiosamente, son las mismas variables que en el anterior mapa de correlación entre variables tenian una correlación muy fuerte entre ellas.
+We see that the variables "x.ege", "y.box", "high", "onpix", "x.box", and "width" are strongly correlated with the first principal component. Curiously, these are the same variables that had a strong correlation with each other in the previous correlation map.
 
-Vamos a ver la distribución de nuestra variables en los dos componentes principales 1 y 2.
+Let’s now examine the distribution of our variables on the first two principal components 1 and 2.
 
 ```{r, warning=FALSE}
 pca.letter <- as.data.frame(pca_result.letter$x[,1:7], stringsAsFactors=F)
@@ -925,9 +889,9 @@ grid.arrange(plots$x.ege, plots$xegvy, plots$y.ege, plots$yegvx, ncol = 2)
 plots$lettr
 ```
 
-Como vemos no se ven clusters separables en las dos primeras componentes principales pero sí vemos que cada variable se situa en unas zonas específicas, agrupandose entre ellas y con las variables más relacionadas entre ellas. Por ejemplo las variables "x.box", "y.box", "width" y "high" se encuentran en zonas parecidas ya que se correlacionan entre ellas.
+As we can see, no separable clusters are visible in the first two principal components, but we do see that each variable is located in specific areas, grouping together with variables that are more related. For example, the variables "x.box", "y.box", "width", and "high" are in similar areas as they correlate with each other.
 
-Con respecto a la variable dependiente "lettr" vemos que podemos intuir que cada letra se separa de las otras en estas dos primeras componentes principales. En las siguientes ilustraciones muestro mejor la distribución de cada clase entre las dos primeras componentes principales.
+Regarding the dependent variable lettr, we see that we can intuitively distinguish each letter from the others in these first two principal components. In the following illustrations, I better show the distribution of each class among the first two principal components.
 
 ```{r}
 unique_letters <- unique(LetterRecognition$lettr)
@@ -953,7 +917,7 @@ grid.arrange( plots$U,plots$V,plots$W,plots$X, plots$Z, ncol = 3)
 
 ```
 
-Por último, otra forma de ver representada la distribución de las clases de letra pero esta vez entre las 3 primeras componentes principales. Se ve claramente que la clasificación de las clases de letras por medio de estas variables es muy prometedora.
+Lastly, another way to represent the distribution of the letter classes but this time among the first three principal components. It becomes clear that classifying the letter classes using these variables is promising.
 
 ```{r, warning=FALSE}
 plot <- plot_ly(data = pca.letter, x = ~PC1, y = ~PC2, z = ~PC3, color = ~lettr, type = 'scatter3d', mode = 'markers')
@@ -965,7 +929,7 @@ plot <- plot %>% layout(title = "3D PCA Letter Recongnition",
 plot
 ```
 
-La gráfica anterior en 3 dimensiones puede ser explicada por la siguiente en la que mostramos el peso que tiene cada variable en cada dimensión. Por lo que "y.box" tiene el mayor peso a la hora de explicar la varianza de los datos en la componente principal 1. Las variables "x2ybr" y "y.bar" lo son importantes para la componente principal 2. Y las variables "x2bar" y "y2bar" para la componente principal 3.
+The above 3D graph can be explained by the next graph, where we show the weight of each variable in each dimension. For instance, "y.box" has the highest weight in explaining the variance of the data in the first principal component. The variables "x2ybr" and "y.bar" are important in the second principal component, while "x2bar" and "y2bar" dominate the third.
 
 ```{r}
 p12 <- fviz_pca_var(pca_result.letter, col.var="cos2",
@@ -980,7 +944,7 @@ grid.arrange(p12, p23, ncol= 2)
 
 ```
 
-Ahora mostramos los valores numéricos de los vectores de carga numérica para las tres primeras componentes principales.
+Now let’s look at the numerical values of the loading vectors for the first three principal components.
 
 ```{r}
 pca_rotation <- round(data.frame(pca_result.letter$rotation[,1:3]),2)
@@ -993,13 +957,13 @@ formattable(pca_rotation,
   ))
 ```
 
-Las variables con mayores cargas en la primera componente principañ ("x.box", "y.box", "width", "high", "onpix") parecen estar relacionadas con las dimensiones físicas de las cajas que encierran las letras y la cantidad de píxeles encendidos (onpix), lo que sugiere que la PC1 podría estar capturando información relacionada con el tamaño y la ocupación espacial general de las letras.
+The variables with the highest loadings in the first principal component ("x.box", "y.box", "width", "high", "onpix") appear to be related to the physical dimensions of the boxes enclosing the letters and the number of on pixels (onpix), suggesting that PC1 might be capturing information related to the general size and spatial occupation of the letters.
 
-Las variables con las mayores cargas absolutas en la segunda componente son "y.bar" y "x2ybr", ambas con valores negativos, y "x.bar" con un valor positivo significativo. Esto indica que PC2 podría estar capturando variaciones en la distribución espacial de los píxeles en las letras, posiblemente reflejando características como la simetría o distribución vertical/horizontal de los píxeles.
+The variables with the highest absolute loadings in the second component are "y.bar" and "x2ybr", both with negative values, and "x.bar" with a significant positive value. This indicates that PC2 might be capturing variations in the spatial distribution of the pixels in the letters, possibly reflecting characteristics like the symmetry or vertical/horizontal distribution of pixels.
 
-Las variables "x2bar" y "xybar" tienen cargas significativas en la componente 3, aunque en direcciones opuestas. "x2bar" tiene una carga positiva, y xybar tiene una carga negativa. Estas cargas sugieren que la componente 3 podría estar asociada con la dispersión o la alineación de los píxeles en las imágenes de las letras, lo que podría interpretarse como características que capturan la textura o la estructura interna de las letras.
+The variables "x2bar" and "xybar" have significant loadings in the third component, although in opposite directions. "x2bar" has a positive loading, and xybar has a negative loading. These loadings suggest that the third component might be associated with the dispersion or alignment of the pixels in the letter images, which could be interpreted as features capturing the texture or internal structure of the letters.
 
-Ahora vamos a ver la explicación de cada variable a la varianza de cada componente principal.
+Now let’s look at the contribution of each variable to the variance of each principal component.
 
 ```{r}
 p1 <- factoextra::fviz_cos2(pca_result.letter, choice = "var", axes = 1, top= 5, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 1")
@@ -1010,35 +974,29 @@ grid.arrange(p1, p2, p3, ncol=3)
 
 ```
 
-Las cinco variables que mejor se proyectan en la primera componente principal son mostradas en el primer gráfico. La variable "y.box" tiene el valor de Cos2 más alto, lo que indica que es la que mejor se representa en esta dimensión. Esto significa que "y.box" contribuye significativamente a la varianza capturada por la primera componente principal.
+The five variables that project best onto the first principal component are shown in the first graph. The variable "y.box" has the highest Cos2 value, indicating that it is best represented in this dimension. This means that "y.box" contributes significantly to the variance captured by the first principal component.
 
-El segundo gráfico muestra las cinco variables con el mayor Cos2 para la segunda componente principal. La variable "x2ybar" tiene un valor de Cos2 mucho mayor en comparación con las otras cuatro, lo que sugiere que tiene una influencia preponderante en esta segunda dimensión.
+The second graph shows the five variables with the highest Cos2 for the second principal component. The variable "x2ybar" has a much higher Cos2 value compared to the other four, suggesting that it has a predominant influence in this second dimension.
 
-La tercera gráfica se presentan las cinco variables más importantes en términos de representación en la tercera componente principal. La variable "x2ybar" también aparece aquí con el valor más alto, seguida de 'y2bar', 'xybar', 'x.ege', y 'x2ybr', lo que sugiere que estas variables también son importantes en la definición de esta tercera componente principal.
+The third graph presents the five most important variables in terms of representation in the third principal component. The variable "x2ybar" also appears here with the highest value, followed by 'y2bar', 'xybar', 'x.ege', and 'x2ybr', suggesting that these variables are also important in defining this third principal component.
 
-## Pregunta 5. Elección algoritmo
+## Algorithm Selection
 
-***¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?***
+KNN is a reasonable choice for the LetterRecognition dataset due to its ability to handle multi-class classifications and its usefulness in situations where classification depends on the similarity of instances in feature space. Its robustness against complex variations in the data makes it suitable for recognizing visual patterns, which is essential in classifying letters based on visual attributes.
 
-KNN es una elección razonable para el conjunto de datos letterRecognition debido a su capacidad para manejar clasificaciones multiclase y su utilidad en situaciones donde la clasificación depende de la similitud de las instancias en un espacio de características. Su robustez frente a las variaciones complejas en los datos lo hace adecuado para reconocer patrones visuales, lo cual es esencial en la clasificación de letras basada en atributos visuales.
+Moreover, KNN does not make assumptions about the underlying distribution of the data, which is advantageous in image processing, where distributions can be complex and non-linear. KNN’s ability to adapt locally to the data by adjusting the number of neighbors allows for great flexibility in finding meaningful structures in the feature space for classification.
 
-Además, KNN no hace suposiciones sobre la distribución subyacente de los datos, lo cual es ventajoso en el procesamiento de imágenes, donde las distribuciones pueden ser complicadas y no lineales. La capacidad de KNN para adaptarse a los datos localmente, ajustando el número de vecinos, permite una gran flexibilidad para encontrar estructuras en el espacio de características que son significativas para la clasificación.
+However, it’s important to note that KNN has its disadvantages. The main drawback is its computational intensity, especially in large datasets with many features, due to the need to calculate the distance between pairs for each test instance against all training instances. Additionally, KNN can be sensitive to irrelevant or redundant features, so good preprocessing and possibly feature selection are crucial steps for its optimal performance.
 
-Sin embargo, es importante destacar que KNN tiene sus desventajas. La principal es su naturaleza computacionalmente intensiva, especialmente en conjuntos de datos grandes con muchas características, debido a la necesidad de calcular la distancia entre pares para cada instancia de prueba contra todas las instancias de entrenamiento. Además, KNN puede ser sensible a características irrelevantes o redundantes, por lo que un buen preprocesamiento y posiblemente la selección de características son pasos cruciales para su rendimiento óptimo.
+## Data Transformation
 
-## Pregunta 6. Transformación
+In this case, the data was previously scaled to be within a range of 0 to 15, so I would not consider scaling the data.
 
-***¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.***
+On the other hand, I could reduce the dimensionality to 7 or 8 dimensions, as they explain more than 80% of the data variance, in case computational capacity becomes an issue. In this case, I will not reduce the dimensionality and will continue with the untransformed data.
 
-En este caso, los datos fueron escalados previamente para situarlos en un rango entre 0 y 15, por lo que no consideraría escalar los datos.
+## Algorithm
 
-Por otro lado, podría reducir la dimensionalidad a 7 u 8 dimensiones ya que explican más del 80% de la varianza de los datos en el caso de que la capacidad computacional se viese comprometida. En este caso, no voy a reducir la dimensionalidad y voy a seguir con los datos sin transformar.
-
-## Pregunta 7. Algoritmo
-
-***Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados***
-
-En primer lugar, vamos a generar los datos de entrenamiento y test de los datos de letterRecognition para entrenar el algoritmo de KNN. Vemos que el porcentaje de cada letra en entrenamiento y test se mantiene.
+First, we will generate the training and test data from the letterRecognition dataset to train the KNN algorithm. We see that the percentage of each letter in training and testing remains consistent.
 
 ```{r}
 set.seed(1234)
@@ -1054,13 +1012,13 @@ table(trainSet.letter$lettr)
 table(testSet.letter$lettr)
 ```
 
-En el apartado anterior de los datos BostonHousing explico la información del paquete kknn de caret y los hiperparámetros a utilizar (kmax, distance y kernel).
+In the previous section on the BostonHousing data, I explain the caret kknn package and the hyperparameters to use (kmax, distance, and kernel).
 
 ```{r}
 modelLookup(("kknn"))
 ```
 
-Para este modelo he elegido entrenar los datos con validación cruzada sin repetición, ya que la dimensionalidad de estos datos es bastante grande y a nivel computacional es más costoso. Permito el análisis en paralelo para aumentar el rendimiento
+For this model, I chose to train the data with non-repeated cross-validation, as the dimensionality of this data is quite large, making it computationally expensive. I also allow parallel processing to improve performance.
 
 ```{r}
 set.seed(1234)
@@ -1071,13 +1029,11 @@ kknnControl.letter<- trainControl(method = "cv",
                            allowParallel = T)
 ```
 
-En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 9 posibilidades combinatorias:
+In a first attempt to find the best model, I perform a grid search of hyperparameters with the following values, yielding 9 combinatorial possibilities:
 
--   kmax: 5, 7, 9
-
--   distance: 1, 2, 3
-
--   kernel: optimal
+- kmax: 5, 7, 9
+- distance: 1, 2, 3
+- kernel: optimal
 
 ```{r}
 set.seed(1234)
@@ -1104,15 +1060,13 @@ plot(myfit.letter.cv10)
 
 ```
 
-En este primer modelo vemos que los mejores hiperparámetros son con una kmax de 9, distancia Manhattan de 1 y el kernel optimal. La Accuracy (0.95) y Kappa (0.95) dan valores muy buenos para este modelo.
+In this first model, we see that the best hyperparameters are with a kmax of 9, Manhattan distance of 1, and the optimal kernel. The Accuracy (0.95) and Kappa (0.95) show very good values for this model.
 
-Vamos a probar con kmax más altos ya que parece que la tendencia del kmax es a subir. Tambien probar otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
+We will try with higher kmax values since the trend for kmax seems to increase. We will also test other types of kernels to see if the model can be improved. The hyperparameters are:
 
--   kmax: 9, 10, 11
-
--   distance: 1
-
--   kernel: rectangular, triangular, optimal
+- kmax: 9, 10, 11
+- distance: 1
+- kernel: rectangular, triangular, optimal
 
 ```{r}
 mygrid.letter <- expand.grid(kmax = seq(9,11,1),
@@ -1134,15 +1088,13 @@ myfit.letter.cv10.2 <- train(y=y, x=x,
 plot(myfit.letter.cv10.2)
 ```
 
-En este segundo modelo vemos que los mejores hiperparámetros sigue siendo una kmax de 9 y el kernel triangular. La Accuracy (0.96) y Kappa (0.96) dan valores muy buenos para este modelo, mejorando los valores anteriores.
+In this second model, we see that the best hyperparameters are still a kmax of 9 and the triangular kernel. The Accuracy (0.96) and Kappa (0.96) show very good values for this model, improving the previous results.
 
-Vamos a probar con kmax estable en 9 pero con otros tipos de kernel para ver si mejoramos el modelo. Los hiperparámetros son:
+We will now try with a fixed kmax of 9 but with different types of kernels to see if the model can be improved. The hyperparameters are:
 
--   kmax: 9,
-
--   distance: 1
-
--   kernel: triangular, epanechnikov, biweight, triweight, cos, inv, gaussian, rank
+- kmax: 9,
+- distance: 1
+- kernel: triangular, epanechnikov, biweight, triweight, cos, inv, gaussian, rank
 
 ```{r}
 mygrid.letter <- expand.grid(kmax = 9,
@@ -1165,9 +1117,9 @@ myfit.letter.cv10.3 <- train(y=y, x=x,
 plot(myfit.letter.cv10.3)
 ```
 
-Seguimos viendo que otros kernel no mejoramos el modelo así que el mejor modelo para este dataset es con una kmax de 9, distancia Manhattan de 1 y kernel triangular.
+We still see that other kernels do not improve the model, so the best model for this dataset is with a kmax of 9, Manhattan distance of 1, and the triangular kernel.
 
-Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro mejor modelo de entrenamiento nos da como resultado un accuracy de entorno 0.96 y un Kappa de 0.96. Estos valores son muy altos y muy buenos, por lo que deberiamos mirar si nuestro modelo ha caido en overfitting.
+As shown in the following graphs, almost all iterations of our best training model result in an accuracy of around 0.96 and a Kappa of 0.96. These values are very high, so we should check if our model has fallen into overfitting.
 
 ```{r}
 resample <- myfit.letter.cv10.3$resample
@@ -1196,7 +1148,7 @@ p2 <- ggplot(data = resample, aes(x = Kappa)) +
 grid.arrange(p1, p2, ncol = 2)
 ```
 
-En la siguiente tabla vemos las variables más importantes para nuestro modelo para cada una de las letras de nuestra variable dependiente lettr. La variable "y2bar" tiene un fuerte importancia en cada una de las letras. En cambio, "y.box" no es importante en nuestro modelo para predecir letras a partir de estas variables.
+In the following table, we see the most important variables for our model for each letter of our dependent variable "lettr." The variable "y2bar" has strong importance in each letter. On the other hand, "y.box" is not important in our model for predicting letters from these variables.
 
 ```{r}
 import <- varImp(myfit.letter.cv10.3)
@@ -1206,11 +1158,11 @@ formattable(import$importance, list(
   ))
 ```
 
-Vamos ahora a predecir las clases de los datos que tenemos de test para este dataset que hemos generado anteriormente. Despues de eso vamos mostrar la información de la matriz de confusión de estos resultados.
+Now let's predict the classes of the test data that we generated earlier. After that, we will show the confusion matrix information of these results.
 
-Una matriz de confusión es una herramienta poderosa utilizada en el campo del aprendizaje automático para evaluar el rendimiento de los modelos de clasificación. Es una tabla específica que permite la visualización del desempeño de un algoritmo de clasificación, mostrando de manera explícita cuándo las clases son confundidas por el modelo durante la predicción.
+A confusion matrix is a powerful tool used in the field of machine learning to assess the performance of classification models. It is a specific table that allows the visualization of the performance of a classification algorithm, explicitly showing when the classes are confused by the model during prediction.
 
-La matriz de confusión compara las etiquetas predichas por el modelo contra las etiquetas reales (verdaderas) que se encuentran en el conjunto de datos de prueba. La matriz de confusión permite calcular métricas importantes como la precisión, la sensibilidad, la especificidad, y el valor predictivo. Tambien ayuda a entender los tipos de errores que está cometiendo el modelo (por ejemplo, si está prediciendo falsos positivos más a menudo que falsos negativos).
+The confusion matrix compares the predicted labels by the model against the actual (true) labels in the test dataset. The confusion matrix allows the calculation of important metrics such as accuracy, sensitivity, specificity, and predictive value. It also helps to understand the types of errors the model is making (for example, if it is predicting false positives more often than false negatives).
 
 ```{r}
 preds.letter <- predict(myfit.letter.cv10.3$finalModel, newdata = testSet.letter)
@@ -1219,11 +1171,11 @@ conf.letter <- confusionMatrix(preds.letter, testSet.letter$lettr)
 conf.letter
 ```
 
-La accuracy global del modelo es del 95.64%, indicando un alto nivel de precisión en la clasificación de las instancias en sus respectivas categorías. El valor de Kappa es de 0.9546, lo que indica una muy buena concordancia entre las predicciones del modelo y los valores reales, más allá de lo que se esperaría por casualidad.
+The overall accuracy of the model is 95.64%, indicating a high level of precision in classifying instances into their respective categories. The Kappa value is 0.9546, which indicates very good agreement between the model's predictions and the actual values, beyond what would be expected by chance.
 
-Tambien cada clase muestra valores altos de sensibilidad (la capacidad del modelo para identificar correctamente los verdaderos positivos) y especificidad (la capacidad del modelo para identificar correctamente los verdaderos negativos), lo que demuestra que el modelo es capaz de clasificar correctamente la mayoría de las instancias en todas las categorías.
+Each class also shows high values of sensitivity (the model's ability to correctly identify true positives) and specificity (the model's ability to correctly identify true negatives), demonstrating that the model is capable of correctly classifying most instances in all categories.
 
-Aunque el modelo es super robusto y comete muy pocos errores, vamos a ver, mediante el siguiente heatmap, cuáles son los fallos que comete el modelo.
+Although the model is highly robust and makes very few errors, let's visualize, through the following heatmap, the mistakes the model makes.
 
 ```{r}
 conf_matrix_long <- as.data.frame(conf.letter$table)
@@ -1234,20 +1186,16 @@ ggplot(data = conf_matrix_long, aes(x = Reference, y = Prediction, fill = Freq))
   theme_minimal() +
   labs(x = "Predicted", y = "Reference", fill = "Count") +
   geom_text(aes(x=Reference, y = Prediction, label=ifelse(Freq > 0, paste(Reference, Prediction), "")), size = 2)+ coord_flip()
-
-
 ```
 
-Lo que vemos en el heatmap son los fallos cometimos de nuestro modelo. Por ejemplo, ha cometido casi 10 fallos al predecir una letra P en lugar de una F. Otro fallo que ha cometido alguna que otra vez es predecir una Q en lugar de una O. Son fallos por una similitud alta a la hora de manuscribir las letras.
+What we see in the heatmap are the errors made by our model. For example, it made nearly 10 mistakes by predicting a "P" instead of an "F". Another error it made a few times was predicting a "Q" instead of an "O". These are mistakes likely due to the high similarity in handwriting between the letters.
 
-Aun con estos pocos fallos, nuestro modelo predice perfectamente con este modelo de entrenamiento las distintas clases. Vamos a ver a continuación si este modelo ha incurrido en overfitting.
+Even with these few mistakes, our model perfectly predicts the different classes with this training model. Let's now check if this model has overfitted.
 
 ```{r}
-# Evaluar el rendimiento en el conjunto de entrenamiento
 trainPredictions <- predict(myfit.letter.cv10.3$finalModel, trainSet.letter)
 conf_train <- confusionMatrix(trainPredictions, trainSet.letter$lettr)
 
-# Evaluar el rendimiento en el conjunto de prueba
 testPredictions <- predict(myfit.letter.cv10.3$finalModel, testSet.letter)
 conf_test <- confusionMatrix(testPredictions, testSet.letter$lettr)
 
@@ -1255,25 +1203,23 @@ conf_train$overall
 conf_test$overall
 ```
 
-Al calcular el accuracy de los valores predichos con los datos de entrenamiento y el accuracy de los datos de test, observamos que en los datos de entrenamiento la precisión es mayor que en los datos de test pero la diferencia no es muy grande, siendo el accuracy también muy alto. Encontramos un modelo muy bueno para predecir el tipo de letra según las variables recogidas en este dataset.
+By calculating the accuracy of the predicted values with the training data and the accuracy with the test data, we observe that the training data accuracy is higher than the test data, but the difference is not significant, and both accuracies are very high. We have found a very good model for predicting letter types based on the variables collected in this dataset.
 
 # Diabetes BRFSS
 
-Los datos de este dataset se localizan en el archivo csv "diabetesBRFSS2015.csv".
+The data for this dataset is located in the "diabetesBRFSS2015.csv" file.
 
 ```{r}
 diabetesBRFSS2015 <- read.csv("diabetesBRFSS2015.csv")
 ```
 
-## Pregunta 1. Tamaño y tipo
-
-***¿Qué tamaño tiene? ¿De qué tipo son las variables?***
+## Size and Type
 
 ```{r}
 str(diabetesBRFSS2015)
 ```
 
-Es un dataset con 70,692 muestras y 22 variables casi todas numéricas aunque es un problema de la carga de los datos. Paso las variables categoricas a factorizarlas.
+It is a dataset with 70,692 samples and 22 variables, most of which are numeric, though some data-loading issues may exist. I'll convert the categorical variables into factors.
 
 ```{r}
 diabetesBRFSS2015[] <- lapply(diabetesBRFSS2015, as.factor)
@@ -1285,50 +1231,46 @@ diabetesBRFSS2015$Diabetes_binary <- factor(diabetesBRFSS2015$Diabetes_binary, l
 Hmisc::describe(diabetesBRFSS2015)
 ```
 
-No hay datos nulos en nuestro dataset. Hay algunas variables categóricas bastante balanceadas pero otras no. Parece que hay algunas variables con varias clases e incluso otras que pueden ser numéricas.
+There are no missing data in this dataset. Some categorical variables are well balanced, while others are not. Some variables have multiple classes, and some may be numerical.
 
-## Pregunta 2. Representación ejemplos
+## Representation of Examples
 
-***Explica qué representan los ejemplos***
+The data in the diabetesBRFSS2015 dataset represents survey information about the general lifestyle of people, including their diabetes diagnosis. Each instance in this dataset represents a person who participated in the study. The primary objective of this dataset is to better understand the relationship between lifestyle and diabetes in the U.S.
 
-Los datos del dataset de diabetesBRFSS2015 representa información de encuestas sobre estilos de vida de personas en general, incluyendo su diagnóstico de diabetes. Cada instancia en este conjunto de datos representa a una persona que participó en este estudio. El objetivo principal de este conjunto de datos es entender mejor la relación entre el estilo de vida y la diabetes en EE.UU.
+The dataset includes 22 variables ranging from demographic information to laboratory test results and survey responses. Below is a summary of some key variables:
 
-El conjunto de datos incluye 22 variables que abarcan desde información demográfica hasta resultados de exámenes de laboratorio y respuestas a preguntas de encuestas. Aquí hay un resumen de algunas de las variables clave:
+1. Diabetes_binary: Binary target variable indicating whether the patient has diabetes (including prediabetes) or not.
+2. HighBP: High blood pressure, indicated as 0 = no, 1 = yes.
+3. HighChol: High cholesterol, also indicated as 0 = no, 1 = yes.
+4. CholCheck: Whether the patient has had a cholesterol check in the past 5 years (0 = no, 1 = yes).
+5. BMI: Body Mass Index, a quantitative measure.
+6. Smoker: Whether the patient has smoked at least 100 cigarettes in their life (0 = no, 1 = yes).
+7. Stroke: Whether the patient has been diagnosed with a stroke (0 = no, 1 = yes).
+8. HeartDiseaseorAttack: Presence of coronary heart disease or a heart attack, indicated as 0 = no, 1 = yes.
+9. PhysActivity: Physical activity in the last 30 days, excluding work (0 = no, 1 = yes).
+10. Fruits: Daily fruit consumption, indicated as 0 = no, 1 = yes.
+11. Veggies: Daily vegetable consumption, indicated as 0 = no, 1 = yes.
+12. HvyAlcoholConsump: Heavy alcohol consumption (0 = no, 1 = yes).
+13. AnyHealthcare: Whether the individual has any healthcare coverage (0 = no, 1 = yes).
+14. NoDocbcCost: Whether the individual could not see a doctor in the past 12 months due to cost (0 = no, 1 = yes).
+15. GenHlth: General health status, measured on a scale from 1 (excellent) to 5 (very poor).
+16. MentHlth: Mental health, indicated by the number of bad days in the past 30 days.
+17. PhysHlth: Physical health, indicated by the number of bad days in the past 30 days.
+18. DiffWalk: Difficulty walking or climbing stairs (0 = no, 1 = yes).
+19. Sex: Gender of the patient (0 = female, 1 = male).
+20. Age: Age, categorized into 13 levels. For example, 1 = 18-24, 9 = 60-64, 13 = 80 or older.
+21. Education: Education level, categorized on a scale of 1 to 6, where 1 = never attended school, 2 = grades 1 to 8, 3 = grades 9 to 11, and so on.
+22. Income: Income, categorized into 8 levels, where 1 = less than $10,000, 5 = less than $35,000, and 8 = $75,000 or more.
 
-1.  [Diabetes_binary]{.underline}: Variable objetivo binaria que indica si el paciente tiene diabetes (incluyendo prediabetes) o no.
-2.  [HighBP]{.underline}: Presión arterial alta, indicada binariamente 0 = no 1 = si.
-3.  [HighChol]{.underline}: Colesterol alto, también indicado de manera binaria 0 = no 1 = si.
-4.  [CholCheck]{.underline}: Indica si el paciente ha tenido un chequeo de colesterol en los últimos 5 años 0 = no 1 = si.
-5.  [BMI]{.underline}: Índice de masa corporal, medida cuantitativa.
-6.  [Smoker]{.underline}: Indica si el paciente ha fumado al menos 100 cigarrillos en su vida 0 = no 1 = si.
-7.  [Stroke]{.underline}: Indica si al paciente le han diagnosticado un derrame cerebral 0 = no 1 = si.
-8.  [HeartDiseaseorAttack]{.underline}: Presencia de enfermedad coronaria o ataque cardíaco, indicado binariamente 0 = no 1 = si.
-9.  [PhysActivity]{.underline}: Actividad física en los últimos 30 días, excluyendo el trabajo 0 = no 1 = si, indicado binariamente.
-10. [Fruits]{.underline}: Consumo diario de frutas, indicado binariamente 0 = no 1 = si.
-11. [Veggies]{.underline}: Consumo diario verduras, indicado binariamente 0 = no 1 = si.
-12. [HvyAlcoholConsump]{.underline}: Consumo excesivo de alcohol 0 = no 1 = si.
-13. [AnyHealthcare]{.underline}: Cobertura de salud de cualquier tipo 0 = no 1 = si.
-14. [NoDocbcCost]{.underline}: Si hubo un momento en los últimos 12 meses en que el paciente necesitaba ver a un doctor pero no pudo debido al costo 0 = no 1 = si.
-15. [GenHlth]{.underline}: Estado general de salud, medido en una escala de 1 a 5, 1 = excelente 2 = muy buena 3 = buena 4 = poca 5 = muy poca.
-16. [MentHlth]{.underline}: Salud mental indicada por el número de días en los últimos 30 días que no fueron buenos.
-17. [PhysHlth]{.underline}: Salud física indicada por el número de días en los últimos 30 días que no fueron buenos.
-18. [DiffWalk]{.underline}: Dificultad para caminar o subir escaleras. 0 = no 1 = si.
-19. [Sex]{.underline}: Género del paciente. 0 = mujer 1 = hombre
-20. [Age]{.underline}: Edad, categorizada en 13 niveles de edad. 1 = 18-24, 9 = 60-64, 13 = 80 o mayores.
-21. [Education]{.underline}: Nivel de educación, en una escala de 1 a 6, 1 = Nunca fue a la escuela, 2 = Grados 1 a 8 (Elemental), 3 = Grados 9 a 11 (Algo de instituto) 4 = Grados 12 or graduación (Graduado de instituto) 5 = Universidad de 1 a 3 años (Asistió a la universidad) 6 = Universidad 4 años o más (Graduado universitario).
-22. [Income]{.underline}: Ingresos, categorizados en una escala de 1 a 8, 1 = menos de 10,000 USD, 5 = menos de 35,000 USD, 8 = 75,000 USD o mas.
+These variables provide a comprehensive view of the risk factors, health conditions, and lifestyle of the participants, allowing for detailed analysis of the relationship between these factors and diabetes.
 
-Estas variables ofrecen una visión integral de los factores de riesgo, condiciones de salud y estilos de vida de los participantes, permitiendo realizar análisis detallados sobre la relación entre estos factores y la diabetes.
+Source: <https://archive.ics.uci.edu/dataset/891/cdc+diabetes+health+indicators>
 
-<https://archive.ics.uci.edu/dataset/891/cdc+diabetes+health+indicators>
+## Type of Problem
 
-## Pregunta 3. Tipo de problema
+This dataset clearly represents a classification problem because the target variable, "Diabetes_binary," is categorical and indicates the presence or absence of diabetes in participants. In classification problems, the goal is to predict a class label for each instance in the dataset based on the observed features. The distinction between having or not having diabetes represents a fundamental classification between two health states, which is a common objective in health data analysis.
 
-***¿Es un problema de clasificación, regresión o cualquier otro? Explica por qué. Si fuera un problema de clasificación, ¿qué tienes que decir sobre la distribución de los ejemplos de cada clase? Si fuera de regresión, ¿qué tienes que decir de la distribución de valores de la variable dependiente?***
-
-El problema planteado en este conjunto de datos se enmarca claramente como un problema de clasificación. Esto se debe a que la variable objetivo, "Diabetes_binary", es categórica y denota la presencia o ausencia de diabetes en los participantes. En los problemas de clasificación, el objetivo es predecir una etiqueta de clase para cada instancia en el conjunto de datos basándose en las características observadas. La distinción entre tener o no tener diabetes representa una clasificación fundamental entre dos estados de salud distintos, lo cual es un objetivo común en el análisis de datos de salud.
-
-Vamos a ver la distribución de los datos de la variable dependiente "diabetes_binary".
+Let's examine the distribution of the data for the dependent variable "Diabetes_binary."
 
 ```{r}
 n<-nrow(diabetesBRFSS2015)
@@ -1346,9 +1288,9 @@ diabetesBRFSS2015 %>%
   xlab("")+ ylab("Percentage %") + ggtitle("Percentage of Diabetic and Healthy people")
 ```
 
-El 50% de nuestros datos son personas sanas y el otro 50% son personas diabéticas. Esto es algo muy importante para tener un modelo robusto con una alta capacidad predictiva.
+Fifty percent of our data represents healthy individuals, and the other 50% represents diabetic individuals. This is crucial for creating a robust model with high predictive power.
 
-Vamos a estudiar las variables categóricas con respecto a la variable dependiente para observar los datos y para ver si vemos alguna tendencia.
+Now, let’s explore the categorical variables concerning the dependent variable to observe the data and check for trends.
 
 ```{r}
 data_long <- pivot_longer(diabetesBRFSS2015[,c(-5, -15, -16, -17, -20, -21, -22)], cols = -c(Diabetes_binary), 
@@ -1386,13 +1328,11 @@ grid.arrange(plots$DiffWalk, plots$Sex, ncol=3)
 
 ```
 
-En estas graficas de barras podemos concluir que casi todas las variables pueden estar muy relacionadas con pacientes con diabetes. Algunas influyen a tener a diabetes como: "HighBP", "HighChol", "CholCheck", "Smoker", "Stroke", "HeartDiseaseorAttack", "DiffWalk" y "Sex" (hombre más propenso). Con esto podemos decir que unos tener una mala salud como una presión arterial alta, colestererol o ser fumador influyen en tener diabetes. El ictus y el ataque cardiaco podría estar relacionado con las variables anteriores por lo que son tambien variables susceptibles de ser predictoras de tener diabetes. En el caso de los chequeo del colesterol en los ultimos 5 años aumenta en pacientes diabeticos. Esto es debido que al ser diagnosticados estos pacientes requieren un mayor seguimiento por parte del personal sanitario.
+From these bar charts, we can conclude that many of the variables are strongly related to diabetes patients. Some variables are associated with a higher likelihood of having diabetes, such as "HighBP," "HighChol," "CholCheck," "Smoker," "Stroke," "HeartDiseaseorAttack," "DiffWalk," and "Sex" (men are more prone). In contrast, variables such as "PhysHlth," "Fruits," and "Veggies" are associated with a lower likelihood of having diabetes, indicating that physical activity and a healthy diet of fruits and vegetables may help prevent diabetes.
 
-Hay otros casos que las variables influyen en no tener diabetes como: "PhysHlth", "Fruits", "Veggies". Es decir que hacer ejercicio fisico, comer frutas y verduras ayudan a evitar tener diabetes.
+Three variables show minimal variation between healthy and diabetic individuals: "HvyAlcoholConsump," "AnyHealthcare," and "NoDocbcCost."
 
-Hay tres variables que no varían mucho entre pacientes sanos y diabéticos que son "HvyAlcoholConsump", "AnyHealthcare" y "NoDocbcCost".
-
-Vamos a mirar ahora las variables con varias clases.
+Next, let's examine the variables with multiple classes.
 
 ```{r}
 # Incluye Diabetes_binary en el pivot_longer, si es necesario
@@ -1431,13 +1371,13 @@ for(variable in unique(data_long$Variable)) {
 grid.arrange(plots$GenHlth, plots$Age, plots$Education, plots$Income, ncol=2)
 ```
 
-Aquí ya vemos algunas distribuciones interesantes. En estos gráficos vemos en color azul los pacientes sanos y en rojo los pacientes diabéticos.
+At this point, we observe some interesting distributions. In these graphs, healthy individuals are represented in blue, and diabetic individuals are in red.
 
-En general, las personas sanas se sienten mejor que los pacientes diabéticos ya que el número 1 en la escala es estado "excelente". Con respecto a la edad, vemos que la mayoría de personas entrevistadas para este estudio se situan entre los 50 y 72 años (7-11). La diabetes puede clasificarse principalmente en dos tipos: Diabetes de tipo 1 y diabetes de tipo 2, cada una de ellas con diferentes edades típicas de aparición. La diabetes de tipo 1, menos frecuente, suele diagnosticarse en niños, adolescentes o adultos jóvenes, pero puede aparecer a cualquier edad. Por otro lado, la diabetes de tipo 2 es más frecuente en adultos mayores de 45 años, aunque cada vez se diagnostica en personas más jóvenes, incluidos adolescentes y adultos jóvenes, debido al aumento de las tasas de obesidad. Parece lógica esta distribución de los datos ya que el mayor número de muestras se situan en esta franja crítica de aparición de la enfermedad, aunque para saber si la variable edad es un factor de riesgo, se debería tener el mismo número de muestras a cada edad. Considero por tanto que esta variable contiene un sesgo importante para nuestro modelo.
+In general, healthy people feel better than diabetic patients, as the score of 1 on the scale represents an "excellent" state. Regarding age, we see that most people interviewed for this study are between 50 and 72 years old (categories 7-11). Diabetes can be primarily classified into two types: Type 1 diabetes and Type 2 diabetes, each with different typical ages of onset. Type 1 diabetes, less common, is usually diagnosed in children, adolescents, or young adults, but it can appear at any age. On the other hand, Type 2 diabetes is more frequent in adults over the age of 45, although it is increasingly being diagnosed in younger people, including teenagers and young adults, due to rising obesity rates. This distribution of data makes sense, as most samples fall into this critical age range for the onset of the disease. However, to determine if age is truly a risk factor, we would need an equal number of samples at every age. Therefore, I consider this variable to have a significant bias in our model.
 
-Otro sesgo importante que veo en estos datos, se muestra en las gráficas de distribución de eduacation e income. Vemos que la mayoría de las personas encuestadas para este estudio son personas con alto status socioeconómico ya que tienen altos niveles de estudios y un porcentaje alto de ingresos económicos, sobre todo en la franja de más de 75.000 USD. Al preguntar a este tipo de personas, otras variables se ven muy sesgadas a la hora de optimizar nuestro modelo como por ejemplo: "NoDocbcCost" (no poder costearse un médico), "AnyHealthcare" (tenencia de seguro médico) o "PhysActivity" (actividad física), ya que todas ellas dependen, de manera directa o indirecta, del nivel económico que tenga esa persona.
+Another significant bias I observe in these data is shown in the distribution graphs for education and income. We see that the majority of people surveyed for this study are individuals with high socioeconomic status, as they have high levels of education and a substantial percentage of high incomes, especially in the over $75,000 range. By surveying this type of people, other variables are highly skewed when optimizing our model, such as "NoDocbcCost" (unable to afford a doctor), "AnyHealthcare" (having health insurance), or "PhysActivity" (physical activity), as all of these are directly or indirectly dependent on the economic status of the person.
 
-Vamos a estudiar ahora las variables continuas del dataset.
+Now, let's study the continuous variables in the dataset.
 
 ```{r}
 p1 <- ggplot(data=diabetesBRFSS2015, aes(x=BMI, group=Diabetes_binary, fill=Diabetes_binary)) +
@@ -1468,39 +1408,31 @@ p3 <- ggplot(data=diabetesBRFSS2015, aes(x=PhysHlth, group=Diabetes_binary, fill
 grid.arrange(p1, p2, p3, ncol = 1)
 ```
 
-## Pregunta 4. Sesgos
+## Biases
 
-***Supón que los posibles sesgos pudieran estar representados por los predictores del dataset. ¿Podríamos determinar visual y numéricamente, con ayuda de PCA si los hay?***
+In this case, since 19 out of 22 variables are categorical, I don't consider it a good idea to perform a PCA (Principal Component Analysis) on this data.
 
-En el caso de este dataset hay 19 de 22 variables categóricas por lo que no considero que sea buena idea hacer una PCA para estos datos.
+In the previous section, I discuss the biases I observe when collecting the data and the type of people surveyed in this study.
 
-En el apartado anterior comento los sesgos que veo a la hora de recoger los datos y del tipo de personas encuestadas en este estudio.
+## Algorithm Choice
 
-## Pregunta 5. Elección algoritmo
+For the diabetesBRFSS2015 dataset, which we've identified as suitable for classification problems, specifically to determine the presence of diabetes, the Naive Bayes algorithm could be an attractive option to start the modeling.
 
-***¿Qué algoritmo de entre los que conoces aplicarías según el problema para el que lo has identificado?***
+Naive Bayes is a probabilistic classifier based on Bayes' Theorem with the "naive" assumption of independence between features. It is especially popular in text classification tasks but can also be effective in health datasets like this one.
 
-Para el dataset diabetesBRFSS2015, que hemos identificado como adecuado para problemas de clasificación, específicamente para determinar la presencia de diabetes, el algoritmo Naive Bayes puede ser una opción atractiva para empezar el modelado.
+Naive Bayes is known for being a simple and fast model to train, which makes it attractive for large datasets or for initial exploration of the data. It works well with categorical variables, which is relevant to the diabetesBRFSS2015 dataset, as it contains several such variables, although it also works with numeric variables.
 
-El algoritmo Naive Bayes es un clasificador probabilístico basado en el teorema de Bayes con la "ingenua" suposición de independencia entre las características. Es especialmente popular en tareas de clasificación de texto pero también puede ser efectivo en datasets de salud como este.
+The assumption of independence between features rarely holds in practice, which can affect the model's accuracy. Since it is a probabilistic model, it may not be as accurate in classification when the relationships between features are complex or highly correlated.
 
-Naive Bayes es conocido por ser un modelo simple y rápido para entrenar lo que lo hace atractivo para datasets grandes o para una exploración inicial de los datos. Funciona bien con variables categóricas lo cual es relevante para el dataset diabetesBRFSS2015, que contiene varias de estas variables, aunque también funciona con variables numéricas.
+Logistic regression is often considered a starting point for binary classification. It can handle linear relationships between features and the target variable but may fall short compared to Naive Bayes, which can capture more complex relationships through its probabilistic approach.
 
-La suposición de independencia entre las características raramente se cumple en la práctica lo que puede afectar la precisión del modelo. Dado que es un modelo probabilístico puede no ser tan preciso en la clasificación cuando las relaciones entre las características son complejas o altamente correlacionadas.
+## Data transformation
 
-A menudo considerado como un punto de partida para la clasificación binaria, la regresión logística puede manejar relaciones lineales entre las características y la variable objetivo, pero puede quedarse corta frente a relaciones más complejas que Naive Bayes podría capturar a través de su enfoque probabilístico.
+The Naive Bayes algorithm is less sensitive to scaling of numerical features compared to other algorithms, so I don't consider modifying the data necessary.
 
-## Pregunta 6. Transformación
+## Algorithm
 
-***¿Sería necesario aplicar alguna transformación a los datos? ¿Por qué? Si la respuesta es afirmativa, explica qué tendría de beneficioso hacerlo.***
-
-El algoritmo Naive Bayes es menos sensible al escalado de características numéricas que otros algoritmos, por lo que no considero modificar los datos.
-
-## Pregunta 7. Algoritmo
-
-***Aplica el algoritmo designado en la pregunta 5 y optimiza el estadístico o estadísticos que consideres pertinente para medir su rendimiento mediante la selección de un modelo óptimo. Comenta los resultados***
-
-En primer, lugar vamos a generar los datos de entrenamiento y test de los datos de diabetesBRFSS2015 para entrenar el algoritmo de Naive-bayes. Vemos que el porcentaje de paciente sano y diabético en entrenamiento y test se mantienen.
+First, let's generate the training and test data from the diabetesBRFSS2015 dataset to train the Naive Bayes algorithm. We see that the proportion of healthy and diabetic patients remains consistent in both the training and test sets.
 
 ```{r}
 set.seed(1234)
@@ -1516,19 +1448,19 @@ table(trainSet.diabetes$Diabetes_binary)
 table(testSet.diabetes$Diabetes_binary)
 ```
 
-Dentro del paquete caret encontramos el modelo naive_bayes y los hiperparámetros específicos que se pueden ajustar dependen del tipo de modelo naive_bayes que se está utilizando. Por lo general, naive_bayes es conocido por su simplicidad y tiene relativamente pocos hiperparámetros en comparación con otros modelos de aprendizaje automático más complejos. Sin embargo, hay algunas variaciones del algoritmo que ofrecen diferentes hiperparámetros para el ajuste, especialmente cuando se trata de modelar la distribución de los datos.
+Within the caret package, we find the Naive Bayes model, and the specific hyperparameters that can be adjusted depend on the type of Naive Bayes model being used. Generally, Naive Bayes is known for its simplicity and has relatively few hyperparameters compared to other, more complex machine learning models. However, some variations of the algorithm offer different hyperparameters for tuning, especially when modeling the data distribution.
 
--   [usekernel]{.underline}: Este hiperparámetro determina si se deben usar kernels para estimar la densidad de probabilidad de las variables numéricas. Es útil cuando se asume que la distribución de los datos no sigue necesariamente una distribución normal. Los valores habituales: TRUE o FALSE. El valor predeterminado suele ser FALSE, lo que significa que no se usan kernels y se asume una distribución normal (Gaussiana) para las variables numéricas. Si se establece en TRUE, se usan kernels para una aproximación más flexible de la distribución de los datos.
+- usekernel: This hyperparameter determines whether to use kernels to estimate the probability density of numerical variables. It is useful when we assume that the data distribution does not necessarily follow a normal distribution. Typical values: TRUE or FALSE. The default value is usually FALSE, meaning that kernels are not used, and a normal (Gaussian) distribution is assumed for the numerical variables. If set to TRUE, kernels are used for a more flexible approximation of the data distribution.
 
--   [laplace]{.underline}: Este hiperparámetro se utiliza cuando usekernel es TRUE. Se refiere al factor de suavizado (factor de Laplace) aplicado a las estimaciones de densidad del kernel para evitar el problema de la probabilidad cero. Los valores habituales son un valor numérico, generalmente pequeño (por ejemplo, 0, 0.01, 0.1). Un valor más grande aumenta el suavizado.
+- laplace: This hyperparameter is used when usekernel is TRUE. It refers to the Laplace smoothing factor applied to the kernel density estimates to avoid the problem of zero probability. Typical values are small numeric values (e.g., 0, 0.01, 0.1). A larger value increases the smoothing.
 
--   [adjust]{.underline}: También relacionado con el uso de kernels (cuando usekernel es TRUE), este hiperparámetro ajusta el ancho de banda del kernel utilizado en la estimación de la densidad. Los valores habituales son un valor numérico mayor que 0. Un valor de 1 significa no ajustar el ancho de banda, valores menores de 1 lo reducen y valores mayores de 1 lo aumentan. Ajustar el ancho de banda puede ayudar a afinar cómo se modela la distribución de las variables numéricas.
+- adjust: Also related to kernel use (when usekernel is TRUE), this hyperparameter adjusts the bandwidth of the kernel used in density estimation. Typical values are greater than 0. A value of 1 means no bandwidth adjustment; values less than 1 reduce it, and values greater than 1 increase it. Adjusting the bandwidth can help refine how the distribution of numerical variables is modeled.
 
 ```{r}
 modelLookup(("naive_bayes"))
 ```
 
-Debido a que computacionalmente naive_bayes no es costoso, he decidido optar por un entrenamiento de validación cruzada repetitiva con 3 repeticiones y 10 particiones. Permito el análisis en paralelo para aumentar el rendimiento.
+Since Naive Bayes is not computationally expensive, I have decided to opt for repetitive cross-validation training with 3 repetitions and 10 partitions. I allow parallel analysis to improve performance.
 
 ```{r}
 set.seed(1234)
@@ -1540,7 +1472,7 @@ NBControl.diabetes <- trainControl(method = "repeatedcv",
                            allowParallel = T)
 ```
 
-En un primer intento de buscar el mejor modelo realizo una parrilla de hiperparámetros con los siguientes valores dando 68 posibilidades combinatorias:
+In an initial attempt to find the best model, I perform a hyperparameter grid search with the following values, providing 68 combinatory possibilities:
 
 -   laplace: 0, 0.2, 0.4, 0.6, 0.8, 1
 
@@ -1569,9 +1501,9 @@ plot(myfit.diabetes.cv10.rp3.nb)
 
 ```
 
-El mejor modelo obtenido es laplace = 0, sin utilizar kernel y adjust= 0.2, aunque no haría falta el parámetro adjust ya que no se utilizará kernel.
+The best model obtained is laplace = 0, without using a kernel, and adjust = 0.2, although the adjust parameter is not necessary since a kernel is not being used.
 
-Como vemos en las siguiente gráficas, casi todas las iteraciones de nuestro mejor modelo de entrenamiento nos da como resultado un accuracy de entorno 0.717 y un Kappa de 0.433. Estos valores son bastante estables en cada una de las iteraciones ya que la distribución de los resultados es muy estable. Los resultados de accuracy, rondan entre 0.7 y 0.73, y los de kappa entre 0.4 y 0.44.
+As we can see from the following graphs, most iterations of our best training model yield an accuracy around 0.717 and a Kappa statistic of 0.433. These values are quite stable in each iteration as the distribution of the results is very consistent. Accuracy results range between 0.7 and 0.73, and Kappa results between 0.4 and 0.44.
 
 ```{r}
 resample <- myfit.diabetes.cv10.rp3.nb$resample
@@ -1600,7 +1532,7 @@ p2 <- ggplot(data = resample, aes(x = Kappa)) +
 grid.arrange(p1, p2, ncol = 2)
 ```
 
-En la siguiente tabla vemos las variables más importantes para nuestro modelo y vemos que la más importante de todas en considerar tener buena salud, seguida de el indice de masa corporal y la tension vascular alta.
+In the following table, we see the most important variables for our model. The most important is general health, followed by BMI (Body Mass Index) and high blood pressure.
 
 ```{r}
 import <- varImp(myfit.diabetes.cv10.rp3.nb)
@@ -1610,7 +1542,7 @@ formattable(import$importance, list(
   ))
 ```
 
-A continuación, vamos a predecir los resultados de la variable dependiente con el conjunto de test generado anteriormente.
+Next, we will predict the results of the dependent variable using the test set we generated earlier.
 
 ```{r, warning=FALSE}
 preds.diabetes <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, newdata = testSet.diabetes)
@@ -1619,39 +1551,47 @@ conf.diabetes <- confusionMatrix(preds.diabetes, testSet.diabetes$Diabetes_binar
 conf.diabetes
 ```
 
-La matriz muestra que 5748 individuos fueron correctamente identificados como saludables por el modelo (verdaderos positivos). 4090 individuos saludables fueron incorrectamente clasificados como diabéticos (Falsos negativos). 1321 individuos diabéticos fueron incorrectamente clasificados como saludables (falsos positivos). 2979 individuos fueron correctamente identificados como diabéticos (verdaderos negativos).
+The confusion matrix shows that:
 
--   [Accuracy]{.underline}: El 61.73% de todas las predicciones fueron correctas. Este valor indica la proporción general de predicciones correctas del modelo.
+- 5748 individuals were correctly identified as healthy by the model (true positives).
 
--   [Intervalo de Confianza del 95% para la Precisión]{.underline}: Entre 60.92% y 62.53%, lo que proporciona un rango estimado de precisión del modelo en la población general.
+- 4090 healthy individuals were incorrectly classified as diabetic (false negatives).
 
--   [Tasa de No Información (No Information Rate)]{.underline}: Es el mayor de las proporciones de las clases de referencia, que en este caso es 50%. Este valor se utiliza para comparar la precisión del modelo; una precisión significativamente mayor que la tasa de no información indica un modelo útil.
+- 1321 diabetic individuals were incorrectly classified as healthy (false positives).
 
--   [P-value de la Precisión Mayor que la Tasa de No Información]{.underline}: Menor que 2.2e-16, lo que sugiere que el modelo es significativamente mejor que una conjetura al azar.
+- 2979 individuals were correctly identified as diabetic (true negatives).
 
--   [Kappa]{.underline}: De 0.2345, reflejando una concordancia débil a moderada más allá de la coincidencia por casualidad.
+- Accuracy: 61.73% of all predictions were correct. This value indicates the overall proportion of correct predictions by the model.
 
--   [Prueba de McNemar Valor-P]{.underline}: Menor que 2.2e-16, lo que indica una diferencia significativa entre los falsos positivos y los falsos negativos.
+- 95% Confidence Interval for Accuracy: Between 60.92% and 62.53%, which provides an estimated range of accuracy in the general population.
 
--   [Sensibilidad]{.underline}: El 42.14% de los individuos diabéticos reales fueron correctamente identificados, lo que sugiere una capacidad moderadamente baja del modelo para detectar la clase "Diabetic".
+- No Information Rate: The largest proportion of the reference classes is 50%. This value is used to compare the model’s accuracy; an accuracy significantly higher than the No Information Rate indicates a useful model.
 
--   [Especificidad]{.underline}: El 81.31% de los individuos saludables reales fueron correctamente identificados, indicando una alta capacidad del modelo para detectar la clase "Healthy".
+- P-value for Accuracy Greater Than No Information Rate: Less than 2.2e-16, suggesting the model is significantly better than random guessing.
 
--   [Valor Predictivo Positivo]{.underline} : El 69.28% de los individuos clasificados como diabéticos eran realmente diabéticos.
+- Kappa: 0.2345, reflecting weak to moderate agreement beyond chance.
 
--   [Valor Predictivo Negativo]{.underline}: El 58.43% de los individuos clasificados como saludables eran realmente saludables.
+- McNemar’s Test P-value: Less than 2.2e-16, indicating a significant difference between false positives and false negatives.
 
--   [Prevalencia de la Clase "Diabetic"]{.underline}: Se asumió un 50%, lo que indica que las clases están balanceadas en el conjunto de datos utilizado para esta matriz de confusión.
+- Sensitivity: 42.14% of the actual diabetic individuals were correctly identified, indicating a moderately low ability of the model to detect the "Diabetic" class.
 
--   [Tasa de Detección para "Diabetic"]{.underline}: El 40.66% del total de individuos fueron correctamente identificados como saludables.
+- Specificity: 81.31% of the actual healthy individuals were correctly identified, showing the model's high capacity to detect the "Healthy" class.
 
--   [Prevalencia de Detección para "Diabetic"]{.underline}: El 30% del total de predicciones fueron para la clase 'Diabetic'.
+- Positive Predictive Value: 69.28% of individuals classified as diabetic were actually diabetic.
 
--   Precisión Balanceada: El 61.73%, igual a la precisión general, dado que la prevalencia de las clases es equilibrada.
+- Negative Predictive Value: 58.43% of individuals classified as healthy were actually healthy.
 
-Aunque el modelo tiene una buena especificidad para detectar individuos saludables, su sensibilidad y valor predictivo negativos son moderados, lo que indica una capacidad limitada para clasificar correctamente a los individuos sanos y para que las predicciones de la clase "Diabetic" sean precisas. El coeficiente Kappa muestra una concordancia débil, lo que sugiere que hay margen de mejora en la capacidad del modelo para clasificar las instancias más allá de lo que se esperaría por azar. La prueba de McNemar destaca una discrepancia significativa entre los falsos positivos y falsos negativos, lo que puede indicar un sesgo en cómo el modelo realiza sus predicciones.
+- Prevalence of the "Diabetic" Class: 50%, indicating balanced classes in the dataset used for this confusion matrix.
 
-A continuación muestro la matriz de confusión gráficamente para una mejor interpretación.
+- Detection Rate for "Diabetic": 40.66% of all individuals were correctly identified as diabetic.
+
+- Detection Prevalence for "Diabetic": 30% of the total predictions were for the "Diabetic" class.
+
+- Balanced Accuracy: 61.73%, the same as the overall accuracy, given the balanced class prevalence.
+
+Although the model has good specificity for detecting healthy individuals, its sensitivity and negative predictive value are moderate, indicating limited capacity to correctly classify individuals as healthy. The Kappa coefficient shows weak agreement, suggesting room for improvement in the model's ability to classify instances beyond what would be expected by chance. McNemar's test highlights a significant discrepancy between false positives and false negatives, which could indicate a bias in how the model makes predictions.
+
+Next, let's visualize the confusion matrix for better interpretation.
 
 ```{r, warning=FALSE}
 preds.diabetes <- predict(myfit.diabetes.cv10.rp3.nb$finalModel, newdata = testSet.diabetes)
@@ -1664,7 +1604,7 @@ plot_confusion_matrix(conf.diabetes_tibble,
                       counts_col = "n")
 ```
 
-Vamos a ver a continuación si este modelo ha incurrido en underfitting.
+Now, let's check whether this model has suffered from underfitting.
 
 ```{r, warning=FALSE}
 # Evaluar el rendimiento en el conjunto de entrenamiento
@@ -1679,6 +1619,6 @@ conf_train_diabetes$overall
 conf_test_diabetes$overall
 ```
 
-Al calcular el accuracy de los valores predichos con los datos de entrenamiento y el accuracy de los datos de test, observamos que en los datos de entrenamiento la precisión es ligeramente menor que los datos de test indicando que nuestro modelo ha incurrido en underfitting por lo que deberiamos considerar otro modelo o ver alternativas de preprocesamiento.
+When calculating the accuracy of the predicted values with the training data and the test data, we observe that the accuracy is slightly lower in the training data compared to the test data, indicating that our model has suffered from underfitting. This suggests that we should consider using another model or explore preprocessing alternatives.
 
-En resumen, este modelo predice muchos falsos negativos. En casos medicos como este, un falso positivo o falsos negativos pueden incurrir en graves consecuencias.
+In summary, this model predicts many false negatives. In medical cases like this, false positives or false negatives can have serious consequences.
